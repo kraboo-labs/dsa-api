@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import CHAR, BigInteger, Date, DateTime, Index, Integer, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PgUUID
+from sqlalchemy.dialects.postgresql import UUID as PgUUID  # noqa: N811
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
