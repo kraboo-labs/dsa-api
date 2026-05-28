@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dsa-postgres
+    environment:
+      POSTGRES_USER: dsa
+      POSTGRES_PASSWORD: dsa
+      POSTGRES_DB: dsa
+    ports:
+      # Host port 5433 — avoids collision with a local brew/system Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      - dsa_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dsa -d dsa"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dsa-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - dsa_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  dsa_pg_data:
+  dsa_redis_data:
