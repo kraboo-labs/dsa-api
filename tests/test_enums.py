@@ -1,8 +1,8 @@
 from core.enums import AreaEnum, EventType, ScrapeRunStatus, TFStatus
 
 
-def test_area_enum_has_twelve_values():
-    assert len(AreaEnum) == 12
+def test_area_enum_has_eighteen_values():
+    assert len(AreaEnum) == 18
 
 
 def test_area_enum_csam_value():

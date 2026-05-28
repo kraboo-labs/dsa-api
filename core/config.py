@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     redis_url: str
 
-    source_url: str = "https://digital-strategy.ec.europa.eu/en/policies/trusted-flaggers"
+    source_url: str = "https://digital-strategy.ec.europa.eu/en/policies/trusted-flaggers-under-dsa"
     user_agent: str = "dsa-api-scraper/0.1 (+https://dsa-api.com)"
 
     sentry_dsn: str | None = None
