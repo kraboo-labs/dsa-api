@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
+import redis.asyncio as aioredis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -19,6 +20,7 @@ from core.config import Settings
 from core.db import ScrapeRunORM, TrustedFlaggerEventORM, TrustedFlaggerORM
 from core.enums import EventType, ScrapeRunStatus, TFStatus
 from core.models import ScrapedTrustedFlagger
+from core.timestamps import write_data_updated_at
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +192,7 @@ async def run_ingest(
     *,
     snapshot_dir: Path | None = None,
     client: httpx.AsyncClient | None = None,
+    redis: aioredis.Redis | None = None,
 ) -> IngestResult:
     """Run one scrape: fetch → parse → normalize → diff → persist. Returns IngestResult.
 
@@ -256,7 +259,15 @@ async def run_ingest(
             run.rows_removed = removed
             run.error_message = "; ".join(parse_errors[:5]) if parse_errors else None
             run.raw_html_snapshot_url = str(snapshot_path) if snapshot_path else None
+            completed_at = run.completed_at
             await session.commit()
+
+        if redis is not None and completed_at is not None:
+            try:
+                await write_data_updated_at(redis, completed_at)
+            except Exception:
+                # Stale X-Data-Updated-At isn't worth crashing a successful scrape.
+                logger.exception("failed to write data_updated_at to redis")
 
         logger.info(
             "scrape %s: seen=%d created=%d updated=%d removed=%d restored=%d errors=%d",

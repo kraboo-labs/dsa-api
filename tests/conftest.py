@@ -64,15 +64,25 @@ def pytest_sessionstart(session):
 
 @pytest_asyncio.fixture(autouse=True)
 async def _reset_redis_cache():
-    """Each test gets a fresh redis client on its own event loop.
+    """Each test gets a fresh redis client on its own event loop AND a clean
+    Redis db, so leftover rate-limit and X-Data-Updated-At state doesn't bleed
+    across tests.
 
     redis.asyncio.Redis is loop-bound; the lru_cache in apps.api.deps.get_redis
     would otherwise serve a stale client created on the first test's loop to
     every subsequent test, producing 'attached to a different loop' errors.
     """
+    import redis.asyncio as aioredis
+
     from apps.api import deps
+    from core.config import get_settings
 
     deps.get_redis.cache_clear()
+    client = aioredis.from_url(get_settings().redis_url)
+    try:
+        await client.flushdb()
+    finally:
+        await client.aclose()
     yield
     deps.get_redis.cache_clear()
 

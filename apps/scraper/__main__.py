@@ -3,7 +3,7 @@ import logging
 import sys
 from pathlib import Path
 
-from apps.api.deps import get_session_factory
+from apps.api.deps import get_redis, get_session_factory
 from apps.scraper.ingest import run_ingest
 from core.config import get_settings
 from core.enums import ScrapeRunStatus
@@ -15,8 +15,9 @@ async def _amain() -> int:
     settings = get_settings()
     snapshot_dir = Path(settings.snapshot_dir)
     factory = get_session_factory()
+    redis = get_redis()
     try:
-        result = await run_ingest(settings, factory, snapshot_dir=snapshot_dir)
+        result = await run_ingest(settings, factory, snapshot_dir=snapshot_dir, redis=redis)
     except Exception:
         # run_ingest already logged + marked the run failed.
         return 1

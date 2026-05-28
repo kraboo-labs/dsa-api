@@ -10,6 +10,7 @@ from apps.api.deps import get_db_session, get_redis
 from apps.api.routers import changes, stats, trusted_flaggers
 from core.config import Settings, get_settings
 from core.ratelimit import LimitConfig, check_limit
+from core.timestamps import read_data_updated_at
 
 
 def _client_ip(request: Request) -> str:
@@ -69,6 +70,15 @@ def create_app() -> FastAPI:
         response: Response = await call_next(request)
         response.headers["X-Source-URL"] = settings.source_url
         response.headers["X-Disclaimer"] = settings.disclaimer
+        # X-Data-Updated-At is populated by the scraper into Redis after each
+        # successful run; missing key just means no header (per PRD it's
+        # informational, not load-bearing).
+        try:
+            updated_at = await read_data_updated_at(get_redis())
+        except Exception:
+            updated_at = None
+        if updated_at:
+            response.headers["X-Data-Updated-At"] = updated_at
         return response
 
     @app.get("/v1/health")
