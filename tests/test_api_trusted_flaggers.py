@@ -7,8 +7,8 @@ from httpx import ASGITransport
 
 from apps.api.deps import get_db_session
 from apps.api.main import create_app
-from core.db import ScrapeRunORM, TrustedFlaggerORM
-from core.enums import AreaEnum, ScrapeRunStatus, TFStatus
+from core.db import ScrapeRunORM, TrustedFlaggerEventORM, TrustedFlaggerORM
+from core.enums import AreaEnum, EventType, ScrapeRunStatus, TFStatus
 from core.models import derive_stable_id
 
 
@@ -284,6 +284,50 @@ async def test_get_single_returns_422_on_malformed_uuid(app_with_db):
     client, _ = app_with_db
     response = await client.get("/v1/trusted-flaggers/not-a-uuid")
     assert response.status_code == 422
+
+
+async def test_history_returns_events_for_tf_newest_first(app_with_db):
+    client, factory = app_with_db
+    tf = _new_tf(name="History Org")
+    older = TrustedFlaggerEventORM(
+        tf_id=tf.id,
+        event_type=EventType.created.value,
+        snapshot={"name": "History Org"},
+        scrape_run_id=uuid4(),
+        occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    newer = TrustedFlaggerEventORM(
+        tf_id=tf.id,
+        event_type=EventType.updated.value,
+        diff={"name": {"from": "Old", "to": "History Org"}},
+        snapshot={"name": "History Org"},
+        scrape_run_id=uuid4(),
+        occurred_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    await _seed(factory, tf, older, newer)
+    body = (await client.get(f"/v1/trusted-flaggers/{tf.id}/history")).json()
+    assert body["meta"]["total"] == 2
+    assert body["meta"]["tf_id"] == str(tf.id)
+    assert [e["event_type"] for e in body["data"]] == [
+        EventType.updated.value,
+        EventType.created.value,
+    ]
+    assert body["data"][0]["diff"] == {"name": {"from": "Old", "to": "History Org"}}
+
+
+async def test_history_returns_404_when_tf_does_not_exist(app_with_db):
+    client, _ = app_with_db
+    response = await client.get(f"/v1/trusted-flaggers/{uuid4()}/history")
+    assert response.status_code == 404
+
+
+async def test_history_returns_empty_for_tf_without_events(app_with_db):
+    client, factory = app_with_db
+    tf = _new_tf(name="Bare")
+    await _seed(factory, tf)
+    body = (await client.get(f"/v1/trusted-flaggers/{tf.id}/history")).json()
+    assert body["data"] == []
+    assert body["meta"]["total"] == 0
 
 
 async def test_list_meta_data_updated_at_uses_latest_successful_scrape(app_with_db):

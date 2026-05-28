@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db_session
 from core.config import Settings, get_settings
-from core.db import ScrapeRunORM, TrustedFlaggerORM
+from core.db import ScrapeRunORM, TrustedFlaggerEventORM, TrustedFlaggerORM
 from core.enums import AreaEnum, ScrapeRunStatus
 from core.models import TrustedFlagger
 
@@ -181,6 +181,45 @@ async def get_trusted_flagger(
         "data": _serialize(row),
         "meta": {
             "data_updated_at": data_updated_at.isoformat() if data_updated_at else None,
+            "source_url": settings.source_url,
+        },
+    }
+
+
+def _serialize_event(ev: TrustedFlaggerEventORM) -> dict[str, Any]:
+    return {
+        "event_id": ev.event_id,
+        "tf_id": str(ev.tf_id),
+        "event_type": ev.event_type,
+        "diff": ev.diff,
+        "snapshot": ev.snapshot,
+        "scrape_run_id": str(ev.scrape_run_id),
+        "occurred_at": ev.occurred_at.isoformat() if ev.occurred_at else None,
+    }
+
+
+@router.get("/{tf_id}/history")
+async def get_trusted_flagger_history(
+    tf_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    if (await session.get(TrustedFlaggerORM, tf_id)) is None:
+        raise HTTPException(status_code=404, detail="trusted flagger not found")
+
+    base = select(TrustedFlaggerEventORM).where(TrustedFlaggerEventORM.tf_id == tf_id)
+    total = (await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+    page = base.order_by(TrustedFlaggerEventORM.occurred_at.desc()).limit(limit).offset(offset)
+    events = (await session.execute(page)).scalars().all()
+    return {
+        "data": [_serialize_event(e) for e in events],
+        "meta": {
+            "tf_id": str(tf_id),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
             "source_url": settings.source_url,
         },
     }
