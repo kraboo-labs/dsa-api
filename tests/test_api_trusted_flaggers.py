@@ -193,6 +193,33 @@ async def test_list_rejects_limit_above_max(app_with_db):
     assert response.status_code == 422
 
 
+async def test_get_single_returns_tf_by_id(app_with_db):
+    client, factory = app_with_db
+    tf = _new_tf(name="Single Org", country_code="SK")
+    await _seed(factory, tf)
+    response = await client.get(f"/v1/trusted-flaggers/{tf.id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["id"] == str(tf.id)
+    assert body["data"]["name"] == "Single Org"
+    assert body["data"]["country_code"] == "SK"
+    assert body["meta"]["source_url"]
+    assert response.headers["X-Source-URL"]
+
+
+async def test_get_single_returns_404_when_not_found(app_with_db):
+    client, _ = app_with_db
+    response = await client.get(f"/v1/trusted-flaggers/{uuid4()}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "trusted flagger not found"
+
+
+async def test_get_single_returns_422_on_malformed_uuid(app_with_db):
+    client, _ = app_with_db
+    response = await client.get("/v1/trusted-flaggers/not-a-uuid")
+    assert response.status_code == 422
+
+
 async def test_list_meta_data_updated_at_uses_latest_successful_scrape(app_with_db):
     client, factory = app_with_db
     old_run = ScrapeRunORM(

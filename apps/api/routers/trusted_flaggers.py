@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -105,4 +106,23 @@ async def list_trusted_flaggers(
     return {
         "data": [_serialize(row) for row in rows],
         "meta": _meta(total, limit, offset, data_updated_at, settings.source_url),
+    }
+
+
+@router.get("/{tf_id}")
+async def get_trusted_flagger(
+    tf_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, Any]:
+    row = await session.get(TrustedFlaggerORM, tf_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="trusted flagger not found")
+    data_updated_at = await _data_updated_at(session)
+    return {
+        "data": _serialize(row),
+        "meta": {
+            "data_updated_at": data_updated_at.isoformat() if data_updated_at else None,
+            "source_url": settings.source_url,
+        },
     }
