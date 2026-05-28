@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # in dev. In prod this should point at a path mounted from object storage.
     snapshot_dir: str = "snapshots"
 
+    # Local clone (or just a directory in dev) of the dsa-data open-data repo
+    # the scraper exports trusted-flaggers.json/csv and changelog.json into
+    # after each successful run. Pushing to GitHub is a separate step.
+    data_export_dir: str = "dsa-data"
+
     # PRD §6: per-IP sliding window.
     rate_limit_per_minute: int = 60
     rate_limit_per_day: int = 5000

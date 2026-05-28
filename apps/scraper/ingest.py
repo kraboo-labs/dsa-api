@@ -10,6 +10,7 @@ import redis.asyncio as aioredis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from apps.scraper.export import export_all
 from apps.scraper.fetch import fetch
 from apps.scraper.parse import (
     extract_api_url,
@@ -191,6 +192,7 @@ async def run_ingest(
     session_factory: async_sessionmaker[AsyncSession],
     *,
     snapshot_dir: Path | None = None,
+    export_dir: Path | None = None,
     client: httpx.AsyncClient | None = None,
     redis: aioredis.Redis | None = None,
 ) -> IngestResult:
@@ -268,6 +270,15 @@ async def run_ingest(
             except Exception:
                 # Stale X-Data-Updated-At isn't worth crashing a successful scrape.
                 logger.exception("failed to write data_updated_at to redis")
+
+        if export_dir is not None:
+            try:
+                async with session_factory() as session:
+                    await export_all(session, export_dir)
+            except Exception:
+                # Open-data export is best-effort here — scrape itself already
+                # succeeded; a stale dsa-data dir is recoverable on next run.
+                logger.exception("failed to export open data to %s", export_dir)
 
         logger.info(
             "scrape %s: seen=%d created=%d updated=%d removed=%d restored=%d errors=%d",

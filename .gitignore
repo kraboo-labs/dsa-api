@@ -40,8 +40,10 @@ htmlcov/
 *.key
 secrets/
 
-# Local data / snapshots (must never leak into source repo)
+# Local data / snapshots (must never leak into source repo).
+# dsa-data/ holds the open-data export checked in elsewhere (see PRD §7).
 data/
+dsa-data/
 snapshots/
 *.sqlite
 *.db

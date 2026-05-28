@@ -14,10 +14,17 @@ logger = logging.getLogger("apps.scraper")
 async def _amain() -> int:
     settings = get_settings()
     snapshot_dir = Path(settings.snapshot_dir)
+    export_dir = Path(settings.data_export_dir)
     factory = get_session_factory()
     redis = get_redis()
     try:
-        result = await run_ingest(settings, factory, snapshot_dir=snapshot_dir, redis=redis)
+        result = await run_ingest(
+            settings,
+            factory,
+            snapshot_dir=snapshot_dir,
+            export_dir=export_dir,
+            redis=redis,
+        )
     except Exception:
         # run_ingest already logged + marked the run failed.
         return 1
