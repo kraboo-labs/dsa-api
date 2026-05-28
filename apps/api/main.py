@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db_session
-from apps.api.routers import trusted_flaggers
+from apps.api.routers import changes, trusted_flaggers
 from core.config import Settings, get_settings
 
 
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
         }
 
     app.include_router(trusted_flaggers.router)
+    app.include_router(changes.router)
 
     return app
 
