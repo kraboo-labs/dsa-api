@@ -17,6 +17,7 @@ from apps.scraper.parse import (
     normalize_rows,
     parse_api_response,
 )
+from apps.scraper.publish import publish_changes
 from core.config import Settings
 from core.db import ScrapeRunORM, TrustedFlaggerEventORM, TrustedFlaggerORM
 from core.enums import EventType, ScrapeRunStatus, TFStatus
@@ -271,6 +272,7 @@ async def run_ingest(
                 # Stale X-Data-Updated-At isn't worth crashing a successful scrape.
                 logger.exception("failed to write data_updated_at to redis")
 
+        had_changes = (created + updated + removed + restored) > 0
         if export_dir is not None:
             try:
                 async with session_factory() as session:
@@ -279,6 +281,24 @@ async def run_ingest(
                 # Open-data export is best-effort here — scrape itself already
                 # succeeded; a stale dsa-data dir is recoverable on next run.
                 logger.exception("failed to export open data to %s", export_dir)
+            else:
+                # Only push when the diff actually changed something; idempotent
+                # re-runs shouldn't fill the dsa-data history with empty commits.
+                if had_changes and settings.data_export_remote:
+                    try:
+                        publish_changes(
+                            export_dir,
+                            branch=settings.data_export_branch,
+                            committer_name=settings.data_export_committer_name,
+                            committer_email=settings.data_export_committer_email,
+                            message=(
+                                f"data: {created} created, {updated} updated, "
+                                f"{removed} removed, {restored} restored "
+                                f"({started_at.isoformat()})"
+                            ),
+                        )
+                    except Exception:
+                        logger.exception("failed to publish dsa-data to remote")
 
         logger.info(
             "scrape %s: seen=%d created=%d updated=%d removed=%d restored=%d errors=%d",

@@ -31,8 +31,16 @@ class Settings(BaseSettings):
 
     # Local clone (or just a directory in dev) of the dsa-data open-data repo
     # the scraper exports trusted-flaggers.json/csv and changelog.json into
-    # after each successful run. Pushing to GitHub is a separate step.
+    # after each successful run.
     data_export_dir: str = "dsa-data"
+
+    # When set, the scraper commits+pushes the dsa-data dir on every scrape
+    # that produced at least one created/updated/removed/restored row.
+    # Leave unset in dev to skip publishing.
+    data_export_remote: str | None = None
+    data_export_branch: str = "main"
+    data_export_committer_name: str = "dsa-api bot"
+    data_export_committer_email: str = "bot@dsa-api.com"
 
     # PRD §6: per-IP sliding window.
     rate_limit_per_minute: int = 60
