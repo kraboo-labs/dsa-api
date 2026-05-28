@@ -63,7 +63,7 @@ class TrustedFlagger(BaseModel):
     areas_of_expertise_raw: list[str] = Field(default_factory=list)
     areas_of_expertise: list[AreaEnum] = Field(default_factory=list)
     designation_date: date | None = None
-    status: Literal["active", "suspended", "revoked"] = "active"
+    status: Literal["active", "suspended", "revoked", "removed"] = "active"
     first_seen_at: datetime
     last_seen_at: datetime
     source_hash: str

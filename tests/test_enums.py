@@ -10,7 +10,7 @@ def test_area_enum_csam_value():
 
 
 def test_tf_status_values():
-    assert {s.value for s in TFStatus} == {"active", "suspended", "revoked"}
+    assert {s.value for s in TFStatus} == {"active", "suspended", "revoked", "removed"}
 
 
 def test_event_type_values():

@@ -26,9 +26,15 @@ class AreaEnum(StrEnum):
 
 
 class TFStatus(StrEnum):
+    # Currently appears on the EU register, or did at last successful scrape.
     active = "active"
+    # EU has marked the entity as suspended (formal DSC action).
     suspended = "suspended"
+    # EU has revoked the trusted-flagger designation (formal DSC action).
     revoked = "revoked"
+    # Entity disappeared from the EU register without EU publishing a formal
+    # state change. Bridges the gap between "active" and the formal statuses.
+    removed = "removed"
 
 
 class EventType(StrEnum):

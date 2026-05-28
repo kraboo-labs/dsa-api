@@ -25,6 +25,10 @@ class Settings(BaseSettings):
 
     sentry_dsn: str | None = None
 
+    # Directory (relative to cwd) where the scraper drops captured HTML snapshots
+    # in dev. In prod this should point at a path mounted from object storage.
+    snapshot_dir: str = "snapshots"
+
     disclaimer: str = "not-a-source-of-truth-see-source-url"
 
 
