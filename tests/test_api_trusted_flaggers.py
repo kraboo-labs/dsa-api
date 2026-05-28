@@ -193,6 +193,72 @@ async def test_list_rejects_limit_above_max(app_with_db):
     assert response.status_code == 422
 
 
+async def test_lookup_requires_exactly_one_param(app_with_db):
+    client, _ = app_with_db
+    none_resp = await client.get("/v1/trusted-flaggers/lookup")
+    assert none_resp.status_code == 400
+    two_resp = await client.get("/v1/trusted-flaggers/lookup?email=a@b.org&domain=b.org")
+    assert two_resp.status_code == 400
+
+
+async def test_lookup_by_email_finds_match(app_with_db):
+    client, factory = app_with_db
+    await _seed(
+        factory,
+        _new_tf(name="Match", email="notices@addictions-france.org"),
+        _new_tf(name="No match", email="other@example.com"),
+    )
+    response = await client.get("/v1/trusted-flaggers/lookup?email=notices@addictions-france.org")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["total"] == 1
+    assert body["data"][0]["name"] == "Match"
+
+
+async def test_lookup_by_email_is_case_insensitive(app_with_db):
+    client, factory = app_with_db
+    await _seed(factory, _new_tf(name="Match", email="foo@Example.org"))
+    response = await client.get("/v1/trusted-flaggers/lookup?email=FOO@example.ORG")
+    assert response.json()["meta"]["total"] == 1
+
+
+async def test_lookup_by_domain_matches_email_domain(app_with_db):
+    client, factory = app_with_db
+    tf = _new_tf(name="Match", email="x@example.org")
+    tf.email_domain = "example.org"
+    await _seed(factory, tf, _new_tf(name="Other", email=None))
+    response = await client.get("/v1/trusted-flaggers/lookup?domain=example.org")
+    body = response.json()
+    assert body["meta"]["total"] == 1
+    assert body["data"][0]["name"] == "Match"
+
+
+async def test_lookup_by_website_extracts_host_and_matches_email_domain(app_with_db):
+    client, factory = app_with_db
+    tf = _new_tf(name="Match")
+    tf.email_domain = "bar.org"
+    await _seed(factory, tf)
+    response = await client.get("/v1/trusted-flaggers/lookup?website=https://bar.org/contact/us")
+    assert response.json()["meta"]["total"] == 1
+
+
+async def test_lookup_returns_empty_when_no_match(app_with_db):
+    client, factory = app_with_db
+    await _seed(factory, _new_tf(name="X", email="x@a.org"))
+    response = await client.get("/v1/trusted-flaggers/lookup?email=ghost@z.org")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == []
+    assert body["meta"]["total"] == 0
+
+
+async def test_lookup_rejects_bogus_website(app_with_db):
+    client, _ = app_with_db
+    response = await client.get("/v1/trusted-flaggers/lookup?website=")
+    # Empty value is treated as "not provided" — 400 because nothing was supplied.
+    assert response.status_code == 400
+
+
 async def test_get_single_returns_tf_by_id(app_with_db):
     client, factory = app_with_db
     tf = _new_tf(name="Single Org", country_code="SK")

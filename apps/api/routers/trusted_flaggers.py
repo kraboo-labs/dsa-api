@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -106,6 +107,63 @@ async def list_trusted_flaggers(
     return {
         "data": [_serialize(row) for row in rows],
         "meta": _meta(total, limit, offset, data_updated_at, settings.source_url),
+    }
+
+
+def _extract_host(url: str) -> str | None:
+    """Parse a (possibly schemeless) URL and return the lowercased host. None on failure."""
+    candidate = url.strip()
+    if not candidate:
+        return None
+    if "://" not in candidate:
+        candidate = f"https://{candidate}"
+    try:
+        host = urlparse(candidate).hostname
+    except ValueError:
+        return None
+    return host.lower() if host else None
+
+
+# IMPORTANT: /lookup must be declared before /{tf_id} or FastAPI tries to parse
+# "lookup" as a UUID and returns 422.
+@router.get("/lookup")
+async def lookup_trusted_flagger(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    email: Annotated[str | None, Query(description="Exact email address.")] = None,
+    domain: Annotated[str | None, Query(description="Email domain, e.g. bar.org.")] = None,
+    website: Annotated[
+        str | None, Query(description="Website URL; we match by host against email_domain.")
+    ] = None,
+) -> dict[str, Any]:
+    provided = [p for p in (email, domain, website) if p]
+    if len(provided) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide exactly one of: email, domain, website",
+        )
+
+    stmt = select(TrustedFlaggerORM)
+    if email:
+        stmt = stmt.where(func.lower(TrustedFlaggerORM.email) == email.strip().lower())
+    elif domain:
+        stmt = stmt.where(func.lower(TrustedFlaggerORM.email_domain) == domain.strip().lower())
+    else:
+        assert website is not None  # narrowed by the elif above
+        host = _extract_host(website)
+        if not host:
+            raise HTTPException(status_code=400, detail="invalid website URL")
+        stmt = stmt.where(func.lower(TrustedFlaggerORM.email_domain) == host)
+
+    rows = (await session.execute(stmt)).scalars().all()
+    data_updated_at = await _data_updated_at(session)
+    return {
+        "data": [_serialize(row) for row in rows],
+        "meta": {
+            "total": len(rows),
+            "data_updated_at": data_updated_at.isoformat() if data_updated_at else None,
+            "source_url": settings.source_url,
+        },
     }
 
 
