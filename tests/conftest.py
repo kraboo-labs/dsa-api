@@ -1,5 +1,6 @@
+import asyncio
 import os
-import subprocess
+import urllib.parse
 
 import pytest_asyncio
 
@@ -15,51 +16,57 @@ os.environ.setdefault("DSA_RATE_LIMIT_PER_MINUTE", "100000")
 os.environ.setdefault("DSA_RATE_LIMIT_PER_DAY", "100000")
 
 
-def pytest_sessionstart(session):
-    """Ensure dsa_test database exists. Idempotent."""
-    check = subprocess.run(
-        [
-            "docker",
-            "exec",
-            "dsa-postgres",
-            "psql",
-            "-U",
-            "dsa",
-            "-d",
-            "dsa",
-            "-tAc",
-            "SELECT 1 FROM pg_database WHERE datname='dsa_test'",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if check.returncode != 0:
-        # docker isn't up or container missing — leave it to tests that need DB to fail loudly.
-        return
-    if not check.stdout.strip():
-        subprocess.run(
-            [
-                "docker",
-                "exec",
-                "dsa-postgres",
-                "psql",
-                "-U",
-                "dsa",
-                "-d",
-                "dsa",
-                "-c",
-                "CREATE DATABASE dsa_test",
-            ],
-            check=True,
-        )
+def _split_db_url(url: str) -> tuple[str, str]:
+    """(admin_url_pointing_at_'dsa'_db, test_db_name).
 
-    # Wipe Redis db=1 so leftover rate-limit keys from prior runs don't bleed
-    # into this session.
-    subprocess.run(
-        ["docker", "exec", "dsa-redis", "redis-cli", "-n", "1", "FLUSHDB"],
-        capture_output=True,
-        check=False,
-    )
+    Connect to a different DB to issue CREATE DATABASE; we use 'dsa' as the
+    admin DB since both local docker-compose and the CI postgres service set
+    it up as POSTGRES_DB.
+    """
+    sync_url = url.replace("postgresql+asyncpg://", "postgresql://")
+    parsed = urllib.parse.urlparse(sync_url)
+    test_db = parsed.path.lstrip("/") or "dsa_test"
+    admin = parsed._replace(path="/dsa").geturl()
+    return admin, test_db
+
+
+async def _ensure_test_db(url: str) -> None:
+    import asyncpg
+
+    admin_url, test_db = _split_db_url(url)
+    if not test_db.endswith("_test"):
+        # Refuse to touch anything that isn't clearly a test DB.
+        return
+    try:
+        conn = await asyncpg.connect(admin_url)
+    except Exception as e:
+        print(f"[conftest] could not connect to postgres for test-db setup: {e}")
+        return
+    try:
+        exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", test_db)
+        if not exists:
+            # asyncpg can't parameterise DDL identifiers; we control test_db.
+            await conn.execute(f'CREATE DATABASE "{test_db}"')
+    finally:
+        await conn.close()
+
+
+async def _flush_redis(url: str) -> None:
+    import redis.asyncio as aioredis
+
+    client = aioredis.from_url(url)
+    try:
+        await client.flushdb()
+    except Exception as e:
+        print(f"[conftest] could not flush redis: {e}")
+    finally:
+        await client.aclose()
+
+
+def pytest_sessionstart(session):
+    """Ensure dsa_test database exists and Redis test db is clean."""
+    asyncio.run(_ensure_test_db(os.environ["DSA_DATABASE_URL"]))
+    asyncio.run(_flush_redis(os.environ["DSA_REDIS_URL"]))
 
 
 @pytest_asyncio.fixture(autouse=True)

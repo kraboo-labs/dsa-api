@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dsa
+          POSTGRES_PASSWORD: dsa
+          POSTGRES_DB: dsa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dsa -d dsa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Postgres service is on default port 5432 in CI (vs 5433 local).
+      DSA_DATABASE_URL: postgresql+asyncpg://dsa:dsa@localhost:5432/dsa_test
+      DSA_REDIS_URL: redis://localhost:6379/1
+      DSA_RATE_LIMIT_PER_MINUTE: "100000"
+      DSA_RATE_LIMIT_PER_DAY: "100000"
+      PYTHONPATH: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Run tests
+        run: pytest -q --maxfail=5
