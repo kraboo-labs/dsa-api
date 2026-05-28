@@ -2,18 +2,19 @@
 
 **Owner:** Martin
 **Brand umbrella:** ibuildtoday
-**Status:** Draft v1
-**Last updated:** 2026-05-27
+**GitHub org:** kraboo-labs
+**Status:** Draft v2 (Phase 0 implemented)
+**Last updated:** 2026-05-28
 
 ---
 
 ## 1. Overview
 
-The European Commission is legally required by Article 22(5) of the Digital Services Act to publish the list of designated Trusted Flaggers "in an easily accessible and machine-readable format". In practice, the Commission publishes the list as an HTML table on `digital-strategy.ec.europa.eu` only. There is no API, no JSON/CSV download, no change feed, and no normalized schema.
+The European Commission is legally required by Article 22(5) of the Digital Services Act to publish the list of designated Trusted Flaggers "in an easily accessible and machine-readable format". In practice, the Commission publishes the list at `https://digital-strategy.ec.europa.eu/en/policies/trusted-flaggers-under-dsa` as a server-rendered HTML page that loads its data client-side from a webtools.europa.eu JSON endpoint configured inside a Drupal settings blob. There is no public, documented API; no JSON/CSV download; no change feed; no normalized schema; no stable identifiers; and the area-of-expertise vocabulary is free-text with one-off values.
 
-This product provides exactly that: a developer-first, open-data, machine-readable mirror of the official EU Trusted Flaggers register, served as a REST API with daily-fresh data, history, and change tracking.
+This product provides exactly that: a developer-first, open-data, machine-readable mirror of the official EU Trusted Flaggers register, served as a REST API with 6-hour-fresh data, history, and change tracking.
 
-**The product is a convenience layer over public data. We sell time-savings and structure, not compliance guarantees.** Authoritative source remains the EU page; this is explicitly stated in ToS, API responses, and product copy.
+**The product is a convenience layer over public data. We sell time-savings and structure, not compliance guarantees.** Authoritative source remains the EU page; this is explicitly stated in ToS, API responses (`X-Disclaimer: not-a-source-of-truth-see-source-url`), and product copy.
 
 ## 2. Goals & Non-goals
 
@@ -71,49 +72,66 @@ EU mid-market online platform engineer / compliance ops engineer who has just be
 
 ## 5. Data Model
 
-### Source HTML structure (current EU page)
-Each TF row contains: `Name`, `Website`, `Email`, `Address`, `DSC`, `Area of expertise`, `Date of designation`. ~60 rows as of May 2026, growing monthly.
+### Source data flow (real, as observed 2026-05-28)
+The public page does NOT contain a `<table>`. It embeds a Drupal settings JSON blob (`<script data-drupal-selector="drupal-settings-json">`) whose `cnt_description.url` points at a `webtools.europa.eu/rest/wbase/wbql/<id>/<rev>/content` endpoint. We fetch the HTML on every scrape to discover that URL (the path's cryptic id can change), then hit the JSON endpoint. Each row exposes: `name`, `country_` (ISO α2, already normalized), `date_of_certification_` (DD/MM/YYYY), `dsc_country_` (DSC name with sometimes a trailing `(CC)`), `areas_of_expertise` (single string, `; `-separated), `tf_address`, `tf_contact_` (email), `tf_contact__url` (URL-encoded mailto fallback), `tf_website`. 72 rows as of 2026-05-28; growing monthly.
 
 ### Normalized schema
 
 ```python
-class TrustedFlagger(BaseModel):
-    id: UUID                              # Stable, derived from name + DSC + designation date
+# ScrapedTrustedFlagger — internal model produced by parse+normalize. Lenient
+# str types for url/email so EU edge cases don't break the parser.
+class ScrapedTrustedFlagger(BaseModel):
+    id: UUID                              # Stable, derived from (name, DSC, designation_date)
     name: str
-    legal_form: Optional[str]             # Inferred from name when possible (e.g., "e.V.", "Stichting")
-    website: Optional[HttpUrl]
-    email: Optional[EmailStr]
-    email_domain: Optional[str]           # Indexed for fast lookup
-    address_raw: str                      # As published
+    legal_form: Optional[str]
+    website: Optional[str]                # str (not HttpUrl) — see note above
+    email: Optional[str]
+    email_domain: Optional[str]
+    address_raw: Optional[str]
     country_code: str                     # ISO 3166-1 alpha-2
-    city: Optional[str]                   # Best-effort extraction
-    postal_code: Optional[str]
-    dsc_name: str                         # As published (e.g., "Coimisiún na Meán")
-    dsc_country_code: str
-    areas_of_expertise_raw: list[str]     # As published, comma-split
+    city: Optional[str]                   # Best-effort extraction (deferred)
+    postal_code: Optional[str]            # Best-effort extraction (deferred)
+    dsc_name: Optional[str]
+    dsc_country_code: Optional[str]
+    areas_of_expertise_raw: list[str]     # Split on '; '
     areas_of_expertise: list[AreaEnum]    # Normalized to enum
     designation_date: date
-    status: Literal["active", "suspended", "revoked"]
-    first_seen_at: datetime               # When we first scraped this entity
-    last_seen_at: datetime                # Last successful scrape that still contained it
-    source_hash: str                      # SHA-256 of canonical source row
-    source_snapshot_url: Optional[str]    # Object storage link to HTML snapshot at first_seen
+    source_hash: str                      # SHA-256 over canonical raw row
+
+# TrustedFlagger — public API contract. Adds operational fields and status.
+class TrustedFlagger(ScrapedTrustedFlagger):
+    status: Literal["active", "suspended", "revoked", "removed"] = "active"
+    first_seen_at: datetime
+    last_seen_at: datetime
+    source_snapshot_url: Optional[str]
 
 
-class AreaEnum(str, Enum):
+# 18 values (12 PRD baseline + 6 added 2026-05-28 from real EU data,
+# closing Open Question §14.5). Unknown raw labels fall back to `other`
+# and the raw string is preserved in areas_of_expertise_raw.
+class AreaEnum(StrEnum):
     ip_infringement = "ip_infringement"
-    illegal_speech = "illegal_speech"        # incl. hate speech, terrorist content where conflated
-    terrorist_content = "terrorist_content"
-    csam = "csam"                            # child sexual abuse material
+    illegal_speech = "illegal_speech"
+    terrorist_content = "terrorist_content"     # not yet observed in live data; forward-looking
+    csam = "csam"                               # not yet observed; forward-looking
     protection_of_minors = "protection_of_minors"
     cyber_violence = "cyber_violence"
     gender_based_violence = "gender_based_violence"
     scams_fraud = "scams_fraud"
-    illegal_products = "illegal_products"    # incl. counterfeit goods
+    illegal_products = "illegal_products"
     consumer_protection = "consumer_protection"
-    disinformation = "disinformation"        # narrow, only where explicitly named
-    other = "other"                          # always preserve raw label alongside
+    disinformation = "disinformation"           # forward-looking; EU currently labels separately
+    # Added 2026-05-28:
+    data_privacy = "data_privacy"               # "Data protection and privacy violations"
+    public_security = "public_security"         # "Risk for public security"
+    violence = "violence"                       # "Violence"
+    self_harm = "self_harm"                     # "Incitement to self-harm"
+    animal_welfare = "animal_welfare"           # "Animal Welfare"
+    civil_discourse = "civil_discourse"         # "Negative effects on civil discourse and elections"
+    other = "other"
 ```
+
+**Status semantics:** `active` = currently on EU's register; `removed` = was on the register, now gone but no formal EU statement; `suspended`/`revoked` = formal DSC actions (EU does not currently publish these — forward-looking).
 
 ### Postgres schema (DigitalOcean managed)
 
@@ -286,9 +304,11 @@ This is the moat. Open data on GitHub is what differentiates us from Tremau's le
 
 2. **`scraper` CronJob**
    - Schedule: `0 */6 * * *` (every 6 hours)
-   - Idempotent: re-runs are safe (diff against current state)
-   - On parse failure: writes error to `scrape_runs`, alerts via Slack webhook, does NOT modify `trusted_flaggers` table
-   - On success: writes events, updates `trusted_flaggers`, invalidates Redis cache, pushes to `dsa-data` repo via GitHub API
+   - Idempotent: re-runs are safe (diff against current state, verified empirically — second consecutive run produces 0 writes)
+   - Two-step fetch: HTML page (for the embedded JSON API URL + snapshot) → JSON API (the data)
+   - HTML snapshot saved to `settings.snapshot_dir` (local disk in dev, object storage in prod) for provenance per §11
+   - On parse failure (HTML missing the drupal-settings blob, JSON envelope broken, etc.): writes error to `scrape_runs`, alerts via Slack webhook, does NOT modify `trusted_flaggers` table
+   - On success: writes events, updates `trusted_flaggers`, writes `dsa:last_scrape_completed_at` to Redis (powers the `X-Data-Updated-At` header), invalidates Redis cache, pushes to `dsa-data` repo via GitHub API
 
 3. **`migrations` Job** (one-shot per deploy)
    - Alembic upgrade head
@@ -361,7 +381,8 @@ If none of these triggers fires within 3 months, treat as a portfolio piece + Ri
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| EU changes HTML structure | High over 12mo | Scraper breaks | Snapshot HTML, alert on structure change, fail loudly without writing bad data |
+| EU changes HTML structure (or moves the embedded JSON API URL) | High over 12mo | Scraper breaks | Snapshot HTML, discover the JSON API URL from the drupal-settings blob on every run, alert on `HtmlStructureError` / `ApiResponseError`, fail loudly without writing bad data |
+| EU adds a new free-text area-of-expertise label | High over 12mo | New label maps to `other` until taxonomy is extended | Unknown labels are accepted and logged; raw label preserved in `areas_of_expertise_raw`; monitor scrape logs for `AreaEnum.other` rate spikes |
 | EU publishes official machine-readable feed | Medium | Reduces our raw-data value | Our value shifts to history + lookup + tooling; we become a wrapper. Still defensible. |
 | Competitor (Tremau, Checkstep) launches free API | Medium | Commoditization | Open-source moat + speed; we are friendlier to developers than any T&S vendor |
 | TF entity requests removal | Low | Legal noise | Clear policy: data is EU-published; requests go to EU. We mirror only what is publicly designated. |
@@ -370,10 +391,11 @@ If none of these triggers fires within 3 months, treat as a portfolio piece + Ri
 
 ## 12. Roadmap
 
-### Phase 0 — Internal (week 1, evenings)
-- Repo skeleton, FastAPI app, Postgres schema, alembic
-- Scraper + parser + tests against current HTML
-- Local docker-compose for dev
+### Phase 0 — Internal (week 1, evenings) — ✅ COMPLETE 2026-05-28
+- ✅ Repo skeleton, FastAPI app, Postgres schema, alembic
+- ✅ Scraper + parser + tests against real EU snapshot (pivot: JSON API, not HTML table)
+- ✅ Local docker-compose for dev (postgres on host port 5433 to coexist with brew postgres)
+- ✅ End-to-end verified: 72 entries in DB, idempotent on second run, all 8 PRD §6 endpoints live, Redis rate limit middleware, `X-Data-Updated-At` header wired through
 
 ### Phase 1 — Public soft launch (week 2)
 - Deploy to k8s
@@ -419,9 +441,9 @@ If none of these triggers fires within 3 months, treat as a portfolio piece + Ri
 
 1. ~~**Domain choice.**~~ ✅ **Decided: `dsa-api.com`** (registered). Cloudflare DNS. Subdomains: `api.`, `docs.`, `data.`, `status.`, `blog.` (later), `app.` (Phase 4). Email via Cloudflare Email Routing: `hello@`, `security@`, `abuse@`, `dpo@`, `press@` → forward to Martin's inbox.
 2. **Ringier as design partner — explicit or quiet?** Are we OK to mention Ringier in case studies later, or keep this fully independent? → **Action: clarify before any public mention.**
-3. **GitHub org name.** New org (e.g., `dsa-api`, `ibuildtoday`) or under existing? Affects branding.
+3. ~~**GitHub org name.**~~ ✅ **Decided 2026-05-28: `kraboo-labs`**. Code repo: `github.com/kraboo-labs/dsa-api`. Data repo: `github.com/kraboo-labs/dsa-data` (not yet created — Phase 1).
 4. **Status page tooling.** Self-host (`upptime` on GitHub Pages — free, ironic and on-brand), or hosted (`betterstack`, free tier)?
-5. **Initial area-of-expertise mapping.** EU labels are free-text. We need a one-time taxonomy mapping pass. → **Action: dump current 60+ rows, manually map to enum, freeze v1 taxonomy.**
+5. ~~**Initial area-of-expertise mapping.**~~ ✅ **Resolved 2026-05-28.** Captured all 18 distinct labels from the live 72-row dump. AreaEnum extended by 6 values: `data_privacy`, `public_security`, `violence`, `self_harm`, `animal_welfare`, `civil_discourse`. Mapping table lives in `core/normalize.py::AREA_LABEL_MAP`. Unknown labels still fall back to `other` with the raw string preserved.
 6. **Should we ping the European Commission DG CONNECT** to tell them we built this? Could go either way — friendly heads-up vs. flying under the radar. My instinct: heads-up email after public launch, with offer to feed back data quality issues. Builds goodwill, signals seriousness.
 
 ---
@@ -434,8 +456,9 @@ If none of these triggers fires within 3 months, treat as a portfolio piece + Ri
 | Web framework | FastAPI |
 | ASGI server | uvicorn (gunicorn worker in prod) |
 | HTTP client | httpx |
-| HTML parser | selectolax |
-| Data validation | pydantic v2 |
+| HTML parsing | Regex over the drupal-settings-json script tag (selectolax kept as a dep for any future HTML work) |
+| JSON envelope | stdlib json |
+| Data validation | pydantic v2 (+ pydantic-settings for config) |
 | ORM | SQLAlchemy 2.x + asyncpg |
 | Migrations | alembic |
 | DB | DigitalOcean Managed Postgres |
