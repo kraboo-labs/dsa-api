@@ -8,6 +8,11 @@ import pytest_asyncio
 # open a connection — dependency overrides take care of that.
 os.environ.setdefault("DSA_DATABASE_URL", "postgresql+asyncpg://dsa:dsa@localhost:5433/dsa_test")
 os.environ.setdefault("DSA_REDIS_URL", "redis://localhost:6379/1")
+# Endpoint tests share Redis db=1; bump rate limits so the middleware doesn't
+# trip during normal test runs. Rate-limit *behavior* is exercised in
+# tests/test_ratelimit.py with explicit small limits.
+os.environ.setdefault("DSA_RATE_LIMIT_PER_MINUTE", "100000")
+os.environ.setdefault("DSA_RATE_LIMIT_PER_DAY", "100000")
 
 
 def pytest_sessionstart(session):
@@ -47,6 +52,29 @@ def pytest_sessionstart(session):
             ],
             check=True,
         )
+
+    # Wipe Redis db=1 so leftover rate-limit keys from prior runs don't bleed
+    # into this session.
+    subprocess.run(
+        ["docker", "exec", "dsa-redis", "redis-cli", "-n", "1", "FLUSHDB"],
+        capture_output=True,
+        check=False,
+    )
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_redis_cache():
+    """Each test gets a fresh redis client on its own event loop.
+
+    redis.asyncio.Redis is loop-bound; the lru_cache in apps.api.deps.get_redis
+    would otherwise serve a stale client created on the first test's loop to
+    every subsequent test, producing 'attached to a different loop' errors.
+    """
+    from apps.api import deps
+
+    deps.get_redis.cache_clear()
+    yield
+    deps.get_redis.cache_clear()
 
 
 @pytest_asyncio.fixture

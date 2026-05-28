@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # in dev. In prod this should point at a path mounted from object storage.
     snapshot_dir: str = "snapshots"
 
+    # PRD §6: per-IP sliding window.
+    rate_limit_per_minute: int = 60
+    rate_limit_per_day: int = 5000
+
     disclaimer: str = "not-a-source-of-truth-see-source-url"
 
 

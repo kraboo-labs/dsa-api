@@ -2,12 +2,26 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.api.deps import get_db_session
+from apps.api.deps import get_db_session, get_redis
 from apps.api.routers import changes, stats, trusted_flaggers
 from core.config import Settings, get_settings
+from core.ratelimit import LimitConfig, check_limit
+
+
+def _client_ip(request: Request) -> str:
+    """Caller IP, honoring the first hop in X-Forwarded-For if present.
+    Behind a trusted proxy in prod we should restrict whose header we trust;
+    for MVP this is fine."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        first = xff.split(",", 1)[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else "unknown"
 
 
 def create_app() -> FastAPI:
@@ -20,6 +34,35 @@ def create_app() -> FastAPI:
         ),
         version="0.0.1",
     )
+
+    minute_limit = LimitConfig("minute", 60, settings.rate_limit_per_minute)
+    day_limit = LimitConfig("day", 86400, settings.rate_limit_per_day)
+
+    @app.middleware("http")
+    async def rate_limit(request: Request, call_next):
+        # Only meter the public v1 surface; /docs, /openapi.json, etc. stay free.
+        if not request.url.path.startswith("/v1/"):
+            return await call_next(request)
+        redis = get_redis()
+        ip = _client_ip(request)
+        for cfg in (minute_limit, day_limit):
+            decision = await check_limit(redis, ip, cfg)
+            if not decision.allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": f"rate limit exceeded ({cfg.name})",
+                        "limit": cfg.max_requests,
+                        "window_seconds": cfg.window_seconds,
+                    },
+                    headers={"Retry-After": str(decision.retry_after)},
+                )
+        response = await call_next(request)
+        # Surface remaining headroom for the tighter (minute) window.
+        # Best-effort: another request may have landed between the check and now.
+        response.headers["X-RateLimit-Limit"] = str(minute_limit.max_requests)
+        response.headers["X-RateLimit-Window-Seconds"] = str(minute_limit.window_seconds)
+        return response
 
     @app.middleware("http")
     async def add_source_headers(request: Request, call_next):
