@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.enums import AreaEnum
 
@@ -46,13 +46,16 @@ class ScrapedTrustedFlagger(BaseModel):
 
 
 class TrustedFlagger(BaseModel):
+    """Public API contract. Lenient string types for url/email — we mirror what
+    EU publishes; we do not re-validate beyond what the scraper accepted."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
     legal_form: str | None = None
-    website: HttpUrl | None = None
-    email: EmailStr | None = None
+    website: str | None = None
+    email: str | None = None
     email_domain: str | None = None
     address_raw: str | None = None
     country_code: str = Field(min_length=2, max_length=2)
@@ -67,4 +70,4 @@ class TrustedFlagger(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     source_hash: str
-    source_snapshot_url: HttpUrl | None = None
+    source_snapshot_url: str | None = None

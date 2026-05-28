@@ -2,39 +2,16 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
-import pytest_asyncio
 from sqlalchemy import select
 
 from apps.scraper.ingest import apply_diff, compute_diff
 from apps.scraper.parse import normalize_rows, parse_api_response
-from core.config import get_settings
-from core.db import (
-    Base,
-    TrustedFlaggerEventORM,
-    TrustedFlaggerORM,
-    make_engine,
-    make_session_factory,
-)
+from core.db import TrustedFlaggerEventORM, TrustedFlaggerORM
 from core.enums import EventType, TFStatus
 from core.models import ScrapedTrustedFlagger, derive_stable_id
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 EU_API_JSON = FIXTURE_DIR / "trusted_flaggers_api.json"
-
-
-@pytest_asyncio.fixture
-async def db_session_factory():
-    """Fresh schema per test. Function scope keeps each ingest test fully isolated."""
-    settings = get_settings()
-    engine = make_engine(settings.database_url, pool_size=1, max_overflow=0)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    factory = make_session_factory(engine)
-    try:
-        yield factory
-    finally:
-        await engine.dispose()
 
 
 def _make_scraped(
