@@ -50,11 +50,17 @@ async def test_export_writes_json_csv_and_changelog(db_session_factory, tmp_path
     csv_path = paths["csv"]
     changelog_path = paths["changelog"]
 
-    # JSON: ordered by name, all expected fields present.
+    # JSON: ordered by name, expected fields present, internal scrape-time
+    # operational fields (first_seen_at, last_seen_at, source_hash) omitted to
+    # keep dsa-data diffs reviewable.
     tfs = json.loads(json_path.read_text(encoding="utf-8"))
     assert [t["name"] for t in tfs] == ["A Org", "B Org"]
     assert tfs[0]["areas_of_expertise"] == [AreaEnum.illegal_speech.value]
     assert tfs[1]["country_code"] == "SK"
+    for field in ("first_seen_at", "last_seen_at", "source_hash"):
+        assert (
+            field not in tfs[0]
+        ), f"{field} must not appear in the dsa-data export (changes every scrape)"
 
     # CSV: headers match CSV_COLUMNS, semicolon-joined arrays.
     with csv_path.open(encoding="utf-8") as f:

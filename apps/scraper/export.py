@@ -24,11 +24,14 @@ CSV_COLUMNS: tuple[str, ...] = (
     "areas_of_expertise_raw",
     "designation_date",
     "status",
-    "first_seen_at",
-    "last_seen_at",
 )
 
 
+# first_seen_at / last_seen_at / source_hash are dsa-api internal operational
+# fields. They change on every scrape (last_seen_at especially) and would make
+# every dsa-data commit noisy in code review. The changelog already encodes
+# "when did this entity appear/change" so consumers of the open data don't
+# need scrape timestamps. They are still exposed by the REST API.
 def _tf_to_dict(row: TrustedFlaggerORM) -> dict[str, Any]:
     return {
         "id": str(row.id),
@@ -47,9 +50,6 @@ def _tf_to_dict(row: TrustedFlaggerORM) -> dict[str, Any]:
         "areas_of_expertise": row.areas_of_expertise,
         "designation_date": row.designation_date.isoformat() if row.designation_date else None,
         "status": row.status,
-        "first_seen_at": row.first_seen_at.isoformat(),
-        "last_seen_at": row.last_seen_at.isoformat(),
-        "source_hash": row.source_hash,
     }
 
 
