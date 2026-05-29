@@ -276,7 +276,7 @@ async def run_ingest(
         if export_dir is not None:
             try:
                 async with session_factory() as session:
-                    await export_all(session, export_dir)
+                    await export_all(session, export_dir, source_snapshot=snapshot_path)
             except Exception:
                 # Open-data export is best-effort here — scrape itself already
                 # succeeded; a stale dsa-data dir is recoverable on next run.

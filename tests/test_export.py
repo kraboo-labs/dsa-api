@@ -84,6 +84,40 @@ async def test_export_creates_data_subdirectory(db_session_factory, tmp_path: Pa
         assert p.parent == tmp_path / "data"
 
 
+async def test_export_copies_source_snapshot_into_data_dir(db_session_factory, tmp_path: Path):
+    snapshot_src = tmp_path / "20260529T191742Z_abc.html"
+    snapshot_src.write_bytes(b"<html>captured EU page</html>")
+    export_dir = tmp_path / "dsa-data"
+
+    async with db_session_factory() as session:
+        paths = await export_all(session, export_dir, source_snapshot=snapshot_src)
+
+    assert "source_snapshot" in paths
+    target = paths["source_snapshot"]
+    assert target.parent == export_dir / "data" / "source-snapshots"
+    assert target.name.endswith(".html")
+    assert target.read_bytes() == b"<html>captured EU page</html>"
+
+
+async def test_export_skips_snapshot_when_path_missing(db_session_factory, tmp_path: Path):
+    async with db_session_factory() as session:
+        paths = await export_all(
+            session, tmp_path, source_snapshot=tmp_path / "does-not-exist.html"
+        )
+    assert "source_snapshot" not in paths
+
+
+async def test_export_snapshot_filename_is_dated_yyyy_mm_dd(db_session_factory, tmp_path: Path):
+    snapshot = tmp_path / "raw.html"
+    snapshot.write_bytes(b"<html/>")
+    async with db_session_factory() as session:
+        paths = await export_all(session, tmp_path / "out", source_snapshot=snapshot)
+    from datetime import UTC, datetime
+
+    expected_name = f"{datetime.now(UTC).strftime('%Y-%m-%d')}.html"
+    assert paths["source_snapshot"].name == expected_name
+
+
 async def test_export_handles_empty_db(db_session_factory, tmp_path: Path):
     async with db_session_factory() as session:
         paths = await export_all(session, tmp_path)

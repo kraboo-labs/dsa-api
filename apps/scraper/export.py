@@ -1,6 +1,8 @@
 import csv
 import json
 import logging
+import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -76,8 +78,31 @@ def _flatten_for_csv(d: dict[str, Any]) -> dict[str, Any]:
     return flat
 
 
-async def export_all(session: AsyncSession, output_dir: Path) -> dict[str, Path]:
+def _copy_source_snapshot(snapshot_path: Path, data_dir: Path) -> Path:
+    """Copy the just-fetched EU HTML into data/source-snapshots/YYYY-MM-DD.html.
+
+    One snapshot per UTC day; if multiple scrapes happen the same day, the
+    later one wins. Git deduplicates byte-identical content for free, so an
+    unchanged day produces no diff in the next publish.
+    """
+    snapshots_dir = data_dir / "source-snapshots"
+    snapshots_dir.mkdir(parents=True, exist_ok=True)
+    target = snapshots_dir / f"{datetime.now(UTC).strftime('%Y-%m-%d')}.html"
+    shutil.copyfile(snapshot_path, target)
+    return target
+
+
+async def export_all(
+    session: AsyncSession,
+    output_dir: Path,
+    *,
+    source_snapshot: Path | None = None,
+) -> dict[str, Path]:
     """Write trusted-flaggers.json/.csv and changelog.json under output_dir/data/.
+
+    If source_snapshot is given and the file exists, also copies it into
+    data/source-snapshots/YYYY-MM-DD.html so the EU page's frozen HTML lands
+    in dsa-data alongside the structured outputs (PRD §7).
 
     Returns a dict {kind: path} for callers that want to log it.
     """
@@ -123,9 +148,16 @@ async def export_all(session: AsyncSession, output_dir: Path) -> dict[str, Path]
         encoding="utf-8",
     )
 
-    logger.info("exported %d TFs + %d events to %s", len(tf_rows), len(event_rows), data_dir)
-    return {
+    result: dict[str, Path] = {
         "json": json_path,
         "csv": csv_path,
         "changelog": changelog_path,
     }
+    if source_snapshot is not None and source_snapshot.exists():
+        try:
+            result["source_snapshot"] = _copy_source_snapshot(source_snapshot, data_dir)
+        except OSError:
+            logger.exception("failed to copy source HTML snapshot into %s", data_dir)
+
+    logger.info("exported %d TFs + %d events to %s", len(tf_rows), len(event_rows), data_dir)
+    return result
