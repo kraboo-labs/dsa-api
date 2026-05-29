@@ -1,0 +1,126 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dsa-api-scraper
+  namespace: dsa-api
+spec:
+  # PRD §8: every 6 hours. UTC. Run at :00 to align with DSA reporting windows.
+  schedule: "0 */6 * * *"
+  # Don't pile up runs if the previous one is still going.
+  concurrencyPolicy: Forbid
+  # If a run is skipped (e.g. cluster outage), don't try to catch up at full
+  # rate — one missed scrape is fine, we'll get the next one in 6h.
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: dsa-api
+            component: scraper
+        spec:
+          restartPolicy: OnFailure
+          # fsGroup gives the app user read access to mounted secret files
+          # without manual chown gymnastics.
+          securityContext:
+            fsGroup: 1001
+          # Step 1: shallow-clone the public dsa-data repo into an ephemeral
+          # volume. We use HTTPS (no auth needed for a public repo's clone)
+          # and reserve SSH purely for the push from the scraper container.
+          initContainers:
+            - name: clone-dsa-data
+              image: alpine/git:latest
+              command:
+                - sh
+                - -ec
+                - |
+                  git clone --depth 1 https://github.com/kraboo-labs/dsa-data.git /export
+                  # Switch origin to SSH so `git push` in publish.py uses the
+                  # mounted deploy key, not anonymous HTTPS.
+                  cd /export
+                  git remote set-url origin git@github.com:kraboo-labs/dsa-data.git
+              volumeMounts:
+                - name: export
+                  mountPath: /export
+          containers:
+            - name: scraper
+              image: registry.digitalocean.com/agent-search/dsa-api:latest
+              imagePullPolicy: Always
+              command: ["python", "-m", "apps.scraper"]
+              env:
+                # --- Non-sensitive config ---
+                - name: DSA_ENVIRONMENT
+                  value: "production"
+                - name: DSA_SOURCE_URL
+                  value: "https://digital-strategy.ec.europa.eu/en/policies/trusted-flaggers-under-dsa"
+                - name: DSA_USER_AGENT
+                  value: "dsa-api-scraper/0.1 (+https://dsa-api.com)"
+                # Scraper runs in its own pod, no need to share with the API,
+                # so rate limits don't matter here; Settings() still wants them.
+                - name: DSA_RATE_LIMIT_PER_MINUTE
+                  value: "60"
+                - name: DSA_RATE_LIMIT_PER_DAY
+                  value: "5000"
+                - name: DSA_SNAPSHOT_DIR
+                  value: "/var/snapshots"
+                - name: DSA_DATA_EXPORT_DIR
+                  value: "/export"
+                - name: DSA_DATA_EXPORT_REMOTE
+                  value: "git@github.com:kraboo-labs/dsa-data.git"
+                - name: DSA_DATA_EXPORT_BRANCH
+                  value: "main"
+                - name: DSA_DATA_EXPORT_COMMITTER_NAME
+                  value: "dsa-api bot"
+                - name: DSA_DATA_EXPORT_COMMITTER_EMAIL
+                  value: "bot@dsa-api.com"
+                # Point git at the mounted deploy key + the pre-trusted
+                # known_hosts already baked into the image.
+                - name: GIT_SSH_COMMAND
+                  value: "ssh -i /home/app/.ssh/keys/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=/home/app/.ssh/known_hosts"
+                # --- Secrets ---
+                - name: DSA_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: dsa-api-secrets
+                      key: DSA_DATABASE_URL
+                - name: DSA_REDIS_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: dsa-api-secrets
+                      key: DSA_REDIS_URL
+                - name: DSA_SENTRY_DSN
+                  valueFrom:
+                    secretKeyRef:
+                      name: dsa-api-secrets
+                      key: DSA_SENTRY_DSN
+                      optional: true
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+              volumeMounts:
+                - name: export
+                  mountPath: /export
+                - name: snapshots
+                  mountPath: /var/snapshots
+                - name: ssh-key
+                  mountPath: /home/app/.ssh/keys
+                  readOnly: true
+          volumes:
+            - name: export
+              emptyDir: {}
+            - name: snapshots
+              emptyDir: {}
+            - name: ssh-key
+              secret:
+                # Created out-of-band, contains a private key called id_ed25519
+                # whose matching public key is registered as a deploy key on
+                # kraboo-labs/dsa-data with write access.
+                secretName: dsa-data-ssh-key
+                defaultMode: 0o400
