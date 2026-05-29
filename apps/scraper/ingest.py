@@ -22,6 +22,7 @@ from core.config import Settings
 from core.db import ScrapeRunORM, TrustedFlaggerEventORM, TrustedFlaggerORM
 from core.enums import EventType, ScrapeRunStatus, TFStatus
 from core.models import ScrapedTrustedFlagger
+from core.notify import notify_slack
 from core.timestamps import write_data_updated_at
 
 logger = logging.getLogger(__name__)
@@ -330,6 +331,12 @@ async def run_ingest(
                 run.status = ScrapeRunStatus.failed.value
                 run.error_message = f"{type(e).__name__}: {e}"[:1000]
                 await session.commit()
+        # Best-effort Slack alert on hard failure; never let a Slack outage
+        # mask the underlying exception.
+        await notify_slack(
+            settings.slack_webhook_url,
+            f":rotating_light: dsa-api scrape failed: {type(e).__name__}: {e}",
+        )
         raise
     finally:
         if own_client:

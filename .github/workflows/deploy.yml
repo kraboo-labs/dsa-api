@@ -106,11 +106,12 @@ jobs:
           kubectl wait --for=condition=complete --timeout=5m \
             job/dsa-api-migrations -n ${{ env.NAMESPACE }}
 
-      - name: Apply API + scraper + ingress
+      - name: Apply API + scraper + watchdog + ingress
         run: |
           kubectl apply -f k8s/api-deployment.yaml
           kubectl apply -f k8s/api-service.yaml
           kubectl apply -f k8s/scraper-cronjob.yaml
+          kubectl apply -f k8s/watchdog-cronjob.yaml
           kubectl apply -f k8s/api-ingress.yaml
 
       - name: Roll out API to the new image

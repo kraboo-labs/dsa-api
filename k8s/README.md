@@ -2,13 +2,14 @@
 
 Target cluster: **DO Kubernetes (fra1)** · public hostname **api.dsa-api.com**
 
-Three workloads share one image:
+Four workloads share one image:
 
 | Workload | Kind | Schedule | Command |
 |---|---|---|---|
 | `dsa-api` | Deployment | continuous (2 replicas) | `uvicorn apps.api.main:app …` |
 | `dsa-api-migrations` | Job | one-shot per deploy | `alembic upgrade head` |
 | `dsa-api-scraper` | CronJob | `0 */6 * * *` (UTC) | `python -m apps.scraper` |
+| `dsa-api-watchdog` | CronJob | `0 * * * *` (UTC) | `python -m apps.scraper.watchdog` |
 
 Prereqs on the cluster (already installed for `lumed`, reused here):
 - `ingress-nginx` (IngressClass `nginx`)
@@ -55,6 +56,7 @@ Schema (env vars the app expects):
 | `DSA_DATABASE_URL` | yes | DO Managed Postgres, format `postgresql+asyncpg://user:pass@host:25060/dbname?sslmode=require` |
 | `DSA_REDIS_URL` | yes | DO Managed Redis, format `rediss://default:pass@host:25061/0` |
 | `DSA_SENTRY_DSN` | no | sentry.io project DSN |
+| `DSA_SLACK_WEBHOOK_URL` | no | Slack incoming webhook (alerts on scrape failures + stale-data watchdog) |
 
 Non-secret env vars (rate limits, source URL, user agent, environment,
 snapshot/export paths, committer identity, GIT_SSH_COMMAND) are pinned
@@ -66,7 +68,8 @@ Create the secret:
 kubectl create secret generic dsa-api-secrets -n dsa-api \
   --from-literal=DSA_DATABASE_URL='postgresql+asyncpg://...' \
   --from-literal=DSA_REDIS_URL='rediss://default:...' \
-  --from-literal=DSA_SENTRY_DSN='https://...@sentry.io/...'
+  --from-literal=DSA_SENTRY_DSN='https://...@sentry.io/...' \
+  --from-literal=DSA_SLACK_WEBHOOK_URL='https://hooks.slack.com/services/T.../B.../...'
 ```
 
 The `DSA_SENTRY_DSN` key is marked `optional` in the manifests; if you
@@ -91,6 +94,7 @@ kubectl wait --for=condition=complete --timeout=5m \
 kubectl apply -f k8s/api-deployment.yaml
 kubectl apply -f k8s/api-service.yaml
 kubectl apply -f k8s/scraper-cronjob.yaml
+kubectl apply -f k8s/watchdog-cronjob.yaml
 kubectl apply -f k8s/api-ingress.yaml
 ```
 
@@ -191,5 +195,7 @@ In `https://github.com/kraboo-labs/dsa-api/settings/secrets/actions`:
       (free, on-brand) or a betterstack-hosted page
 - [ ] Move HTML snapshots from emptyDir to either DO Spaces or
       `dsa-data/data/source-snapshots/YYYY-MM-DD.html` per PRD §7
-- [ ] Slack webhook alerts when a CronJob fails or the source page
-      structure changes (see `apps/scraper/parse.py::HtmlStructureError`)
+- ✅ Slack: scraper hard-failure notifies on the configured webhook;
+      `dsa-api-watchdog` CronJob alerts hourly if the last successful
+      scrape is older than 24h. Add `DSA_SLACK_WEBHOOK_URL` to
+      `dsa-api-secrets` to activate; missing key = silent.

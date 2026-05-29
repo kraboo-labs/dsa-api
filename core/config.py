@@ -25,6 +25,11 @@ class Settings(BaseSettings):
 
     sentry_dsn: str | None = None
 
+    # Slack incoming webhook URL (https://hooks.slack.com/services/...).
+    # When set, the scraper posts on hard failures and the watchdog CronJob
+    # alerts if the last successful scrape is older than 24h.
+    slack_webhook_url: str | None = None
+
     # Directory (relative to cwd) where the scraper drops captured HTML snapshots
     # in dev. In prod this should point at a path mounted from object storage.
     snapshot_dir: str = "snapshots"

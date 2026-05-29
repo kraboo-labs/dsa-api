@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dsa-api-watchdog
+  namespace: dsa-api
+spec:
+  # Hourly. The scraper runs every 6h, so this checks ~6× per scrape cycle
+  # and gives plenty of slack to catch a misfire before the 24h threshold.
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: dsa-api
+            component: watchdog
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: watchdog
+              image: registry.digitalocean.com/agent-search/dsa-api:latest
+              imagePullPolicy: Always
+              command: ["python", "-m", "apps.scraper.watchdog"]
+              env:
+                - name: DSA_ENVIRONMENT
+                  value: "production"
+                - name: DSA_RATE_LIMIT_PER_MINUTE
+                  value: "60"
+                - name: DSA_RATE_LIMIT_PER_DAY
+                  value: "5000"
+                - name: DSA_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: dsa-api-secrets
+                      key: DSA_DATABASE_URL
+                - name: DSA_REDIS_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: dsa-api-secrets
+                      key: DSA_REDIS_URL
+                - name: DSA_SLACK_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: dsa-api-secrets
+                      key: DSA_SLACK_WEBHOOK_URL
+                      optional: true
+                - name: DSA_SENTRY_DSN
+                  valueFrom:
+                    secretKeyRef:
+                      name: dsa-api-secrets
+                      key: DSA_SENTRY_DSN
+                      optional: true
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "200m"
