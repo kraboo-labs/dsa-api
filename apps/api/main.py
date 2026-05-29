@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.deps import get_db_session, get_redis
 from apps.api.routers import changes, stats, trusted_flaggers
 from core.config import Settings, get_settings
+from core.observability import init_sentry
 from core.ratelimit import LimitConfig, check_limit
 from core.timestamps import read_data_updated_at
 
@@ -27,6 +28,8 @@ def _client_ip(request: Request) -> str:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # Must run before FastAPI() so the integration picks up the app on init.
+    init_sentry(settings)
     app = FastAPI(
         title="DSA Trusted Flaggers API",
         description=(

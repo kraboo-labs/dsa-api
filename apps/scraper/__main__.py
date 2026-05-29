@@ -7,6 +7,7 @@ from apps.api.deps import get_redis, get_session_factory
 from apps.scraper.ingest import run_ingest
 from core.config import get_settings
 from core.enums import ScrapeRunStatus
+from core.observability import init_sentry
 
 logger = logging.getLogger("apps.scraper")
 
@@ -52,6 +53,9 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # Wire sentry BEFORE the asyncio loop so any startup failure (settings
+    # load, redis init) is captured too.
+    init_sentry(get_settings())
     sys.exit(asyncio.run(_amain()))
 
 
