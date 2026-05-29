@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dsa-api
+  namespace: dsa-api
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # API responses are small (≤ ~100 KB), so we keep nginx defaults for
+    # body size + timeouts. If we ever add a bulk-export endpoint, bump
+    # proxy-read-timeout here.
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.dsa-api.com
+      secretName: dsa-api-tls
+  rules:
+    - host: api.dsa-api.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dsa-api
+                port:
+                  number: 80
