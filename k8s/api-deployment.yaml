@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dsa-api
+  namespace: dsa-api
+spec:
+  # PRD §8: 2 replicas to start. Bump once we have real traffic signal.
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: dsa-api
+  template:
+    metadata:
+      labels:
+        app: dsa-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: dsa-api
+          image: registry.digitalocean.com/agent-search/dsa-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            # --- Non-sensitive config ---
+            - name: DSA_ENVIRONMENT
+              value: "production"
+            - name: DSA_SOURCE_URL
+              value: "https://digital-strategy.ec.europa.eu/en/policies/trusted-flaggers-under-dsa"
+            - name: DSA_USER_AGENT
+              value: "dsa-api-scraper/0.1 (+https://dsa-api.com)"
+            - name: DSA_RATE_LIMIT_PER_MINUTE
+              value: "60"
+            - name: DSA_RATE_LIMIT_PER_DAY
+              value: "5000"
+            # --- Secrets (DB + Redis connection strings, optional Sentry DSN) ---
+            - name: DSA_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dsa-api-secrets
+                  key: DSA_DATABASE_URL
+            - name: DSA_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dsa-api-secrets
+                  key: DSA_REDIS_URL
+            - name: DSA_SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: dsa-api-secrets
+                  key: DSA_SENTRY_DSN
+                  optional: true
+          # Liveness probes /v1/version on purpose — it doesn't touch the DB,
+          # so a transient Postgres hiccup won't restart the pod. Readiness
+          # uses /v1/health so traffic stops flowing to a pod that can't talk
+          # to the DB until it recovers.
+          livenessProbe:
+            httpGet:
+              path: /v1/version
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
