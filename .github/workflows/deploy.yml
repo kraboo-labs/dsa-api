@@ -1,8 +1,9 @@
 name: Build & Deploy dsa-api to DigitalOcean
 
+# Manual-trigger only so a missing DIGITALOCEAN_ACCESS_TOKEN / KUBE_CONFIG
+# secret doesn't fail every push. Click 'Run workflow' on the Actions tab
+# when you want to ship. CI runs on every push regardless (see ci.yml).
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 env:

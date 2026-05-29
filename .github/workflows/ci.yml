@@ -1,11 +1,13 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
-# Pushes to main run the full Build & Deploy workflow (which includes its
-# own CI step), so we don't need to also fire ci.yml there.
+# Deploy is a separate workflow gated on workflow_dispatch, so pushes only
+# pay for the CI side and a missing DO_TOKEN can't fail every push.
 
 concurrency:
   group: ci-${{ github.ref }}
