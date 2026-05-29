@@ -1,0 +1,33 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Local dev artifacts that have no place in the image
+.env
+.env.*
+!.env.example
+snapshots
+dsa-data
+data
+*.log
+
+# Local config / docs
+.vscode
+.idea
+*.swp
+.DS_Store
+prds
+README.md
+LICENSE
+
+# Tests aren't run inside the image
+tests
