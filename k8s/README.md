@@ -105,11 +105,12 @@ Once `Ready=True`, hit https://api.dsa-api.com/v1/health.
 
 ### DNS
 
-| Host | Type | Value |
-|---|---|---|
-| `api.dsa-api.com` | A | `<ingress-nginx LB IPv4>` (same LB as `klarita.sk`) |
+| Host | Type | Value | Purpose |
+|---|---|---|---|
+| `api.dsa-api.com` | A | `<ingress-nginx LB IPv4>` | REST API root |
+| `docs.dsa-api.com` | A | `<same LB IPv4>` | Hitting `/` 307s to Swagger UI |
 
-> Do NOT add an AAAA record. DO LB is IPv4-only; a stale AAAA breaks the
+> Do NOT add AAAA records. DO LB is IPv4-only; a stale AAAA breaks the
 > Let's Encrypt HTTP-01 challenge.
 
 The `klarita.sk` ingress already proves the LB exists — look up the IP
@@ -184,8 +185,8 @@ In `https://github.com/kraboo-labs/dsa-api/settings/secrets/actions`:
 
 ## Phase 1 follow-ups
 
-- [ ] `docs.dsa-api.com` redirect/host serving FastAPI's `/docs` directly
-      (Swagger UI is currently reachable at `api.dsa-api.com/docs`)
+- ✅ `docs.dsa-api.com` — wired in this ingress; root route in
+      apps/api/main.py 307s to /docs when the host header matches.
 - [ ] `status.dsa-api.com` — either an upptime board on GitHub Pages
       (free, on-brand) or a betterstack-hosted page
 - [ ] Move HTML snapshots from emptyDir to either DO Spaces or

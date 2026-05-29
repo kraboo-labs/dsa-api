@@ -10,12 +10,29 @@ metadata:
     # proxy-read-timeout here.
 spec:
   ingressClassName: nginx
+  # Separate TLS secret per host so a cert-manager hiccup on one doesn't
+  # invalidate the other. Same isolation pattern as lumed-tls / klarita-tls.
   tls:
     - hosts:
         - api.dsa-api.com
       secretName: dsa-api-tls
+    - hosts:
+        - docs.dsa-api.com
+      secretName: dsa-api-docs-tls
   rules:
     - host: api.dsa-api.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dsa-api
+                port:
+                  number: 80
+    # docs.dsa-api.com hits the same backend; the root route in
+    # apps/api/main.py detects the host and 307s to /docs (Swagger UI).
+    - host: docs.dsa-api.com
       http:
         paths:
           - path: /

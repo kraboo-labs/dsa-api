@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,6 +109,22 @@ def create_app() -> FastAPI:
         return {
             "version": app.version,
             "environment": settings.environment,
+        }
+
+    @app.get("/", include_in_schema=False, response_model=None)
+    async def root(request: Request) -> RedirectResponse | dict:
+        # When the host is docs.dsa-api.com, send users straight to Swagger UI.
+        # On any other host (api.dsa-api.com, localhost, internal) return a
+        # small pointer document instead of FastAPI's default 404.
+        host = request.headers.get("host", "").lower()
+        if host.startswith("docs."):
+            return RedirectResponse(url="/docs", status_code=307)
+        return {
+            "name": "DSA Trusted Flaggers API",
+            "version": app.version,
+            "docs": "/docs",
+            "openapi": "/openapi.json",
+            "source": settings.source_url,
         }
 
     app.include_router(trusted_flaggers.router)
