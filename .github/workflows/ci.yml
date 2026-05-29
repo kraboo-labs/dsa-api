@@ -1,10 +1,11 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+
+# Pushes to main run the full Build & Deploy workflow (which includes its
+# own CI step), so we don't need to also fire ci.yml there.
 
 concurrency:
   group: ci-${{ github.ref }}

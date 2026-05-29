@@ -1,0 +1,147 @@
+name: Build & Deploy dsa-api to DigitalOcean
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: registry.digitalocean.com/agent-search
+  APP_IMAGE: registry.digitalocean.com/agent-search/dsa-api
+  NAMESPACE: dsa-api
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dsa
+          POSTGRES_PASSWORD: dsa
+          POSTGRES_DB: dsa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dsa -d dsa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DSA_DATABASE_URL: postgresql+asyncpg://dsa:dsa@localhost:5432/dsa_test
+      DSA_REDIS_URL: redis://localhost:6379/1
+      DSA_RATE_LIMIT_PER_MINUTE: "100000"
+      DSA_RATE_LIMIT_PER_DAY: "100000"
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format check
+        run: ruff format --check .
+      - name: Run tests
+        run: pytest -q --maxfail=5
+
+  build-and-deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Login to DO Container Registry
+        run: doctl registry login --expiry-seconds 7200
+
+      - name: Set image tag
+        run: echo "TAG=sha-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Build & push app image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t ${{ env.APP_IMAGE }}:${{ env.TAG }} \
+            -t ${{ env.APP_IMAGE }}:latest \
+            .
+          docker push ${{ env.APP_IMAGE }}:${{ env.TAG }}
+          docker push ${{ env.APP_IMAGE }}:latest
+
+      - name: Set up kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Apply namespace
+        run: kubectl apply -f k8s/namespace.yaml
+
+      # Migrations job is immutable once created, so we delete + re-apply
+      # before every deploy. The manifest pins image:latest which we just
+      # pushed, so it picks up the new schema.
+      - name: Run schema migrations
+        run: |
+          kubectl delete job dsa-api-migrations -n ${{ env.NAMESPACE }} --ignore-not-found
+          kubectl apply -f k8s/migrations-job.yaml
+          kubectl wait --for=condition=complete --timeout=5m \
+            job/dsa-api-migrations -n ${{ env.NAMESPACE }}
+
+      - name: Apply API + scraper + ingress
+        run: |
+          kubectl apply -f k8s/api-deployment.yaml
+          kubectl apply -f k8s/api-service.yaml
+          kubectl apply -f k8s/scraper-cronjob.yaml
+          kubectl apply -f k8s/api-ingress.yaml
+
+      - name: Roll out API to the new image
+        run: |
+          kubectl set image deployment/dsa-api \
+            dsa-api=${{ env.APP_IMAGE }}:${{ env.TAG }} \
+            -n ${{ env.NAMESPACE }}
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/dsa-api -n ${{ env.NAMESPACE }} --timeout=5m
+
+      - name: Clean up old image tags (keep last 5 sha-*)
+        run: |
+          OLD_TAGS=$(doctl registry repository list-tags agent-search/dsa-api \
+            --no-header --format Tag \
+            | grep '^sha-' | sort | head -n -5)
+
+          if [ -z "$OLD_TAGS" ]; then
+            echo "Nothing to clean"
+          else
+            for OLD_TAG in $OLD_TAGS; do
+              echo "Deleting dsa-api:$OLD_TAG"
+              doctl registry repository delete-tag agent-search/dsa-api $OLD_TAG --force || true
+            done
+          fi
+
+      - name: Registry garbage collection
+        run: doctl registry garbage-collection start --include-untagged-manifests --force agent-search || true
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "Deployment successful!"
+          echo "API URL: https://api.dsa-api.com"
+          echo "Image:   ${{ env.APP_IMAGE }}:${{ env.TAG }}"
