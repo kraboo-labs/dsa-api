@@ -109,16 +109,26 @@ Once `Ready=True`, hit https://api.dsa-api.com/v1/health.
 
 ### DNS
 
+The ingress serves both canonical (dsa-api.com) and temporary
+(ibuildtoday.com) hosts simultaneously. Start with the ibuildtoday A
+records so DNS is one-step; add the dsa-api.com side once that domain's
+DNS is ready and the cutover is just dropping the temp hosts from the
+ingress (and from the upptime monitor list).
+
 | Host | Type | Value | Purpose |
 |---|---|---|---|
-| `api.dsa-api.com` | A | `<ingress-nginx LB IPv4>` | REST API root |
-| `docs.dsa-api.com` | A | `<same LB IPv4>` | Hitting `/` 307s to Swagger UI |
+| `dsa-api.ibuildtoday.com` | A | `<ingress-nginx LB IPv4>` | **Primary during cutover** — REST API |
+| `docs-dsa-api.ibuildtoday.com` | A | `<same LB IPv4>` | **Primary during cutover** — Swagger UI |
+| `api.dsa-api.com` | A | `<same LB IPv4>` | Canonical REST API |
+| `docs.dsa-api.com` | A | `<same LB IPv4>` | Canonical Swagger UI |
 
 > Do NOT add AAAA records. DO LB is IPv4-only; a stale AAAA breaks the
 > Let's Encrypt HTTP-01 challenge.
 
 The `klarita.sk` ingress already proves the LB exists — look up the IP
-with `kubectl get svc -n ingress-nginx`.
+with `kubectl get svc -n ingress-nginx`. ibuildtoday.com DNS is managed
+in the same Cloudflare zone as lumed's records, so adding the new
+sub-hosts is identical to the lumed setup.
 
 ## Updates
 
