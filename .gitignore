@@ -42,8 +42,10 @@ secrets/
 
 # Local data / snapshots (must never leak into source repo).
 # dsa-data/ holds the open-data export checked in elsewhere (see PRD §7).
+# dsa-api-status/ holds the upptime status repo (see Phase 1 follow-ups).
 data/
 dsa-data/
+dsa-api-status/
 snapshots/
 *.sqlite
 *.db
