@@ -96,6 +96,47 @@ jobs:
       - name: Apply namespace
         run: kubectl apply -f k8s/namespace.yaml
 
+      # Reconcile cluster secrets from GH Actions secrets on every deploy.
+      # Using `kubectl create … --dry-run=client -o yaml | kubectl apply -f -`
+      # makes the operation idempotent: first run creates, subsequent runs
+      # update in place. Values stay out of the workflow log because
+      # GH Actions masks anything that came through secrets context.
+      - name: Apply k8s secrets
+        env:
+          DSA_DATABASE_URL: ${{ secrets.DSA_DATABASE_URL }}
+          DSA_REDIS_URL: ${{ secrets.DSA_REDIS_URL }}
+          DSA_SENTRY_DSN: ${{ secrets.DSA_SENTRY_DSN }}
+          DSA_SLACK_WEBHOOK_URL: ${{ secrets.DSA_SLACK_WEBHOOK_URL }}
+          DSA_DATA_SSH_KEY: ${{ secrets.DSA_DATA_SSH_KEY }}
+        run: |
+          if [ -z "$DSA_DATABASE_URL" ] || [ -z "$DSA_REDIS_URL" ] || [ -z "$DSA_DATA_SSH_KEY" ]; then
+            echo "::error::Required secrets missing. Set DSA_DATABASE_URL, DSA_REDIS_URL, DSA_DATA_SSH_KEY in repo Actions secrets."
+            exit 1
+          fi
+
+          # dsa-api-secrets — connection strings + optional observability creds.
+          # Empty DSA_SENTRY_DSN / DSA_SLACK_WEBHOOK_URL keys are written as
+          # empty strings; both `init_sentry` and `notify_slack` no-op on empty
+          # so absence is functionally equivalent to "not set".
+          kubectl create secret generic dsa-api-secrets \
+            -n ${{ env.NAMESPACE }} \
+            --from-literal=DSA_DATABASE_URL="$DSA_DATABASE_URL" \
+            --from-literal=DSA_REDIS_URL="$DSA_REDIS_URL" \
+            --from-literal=DSA_SENTRY_DSN="$DSA_SENTRY_DSN" \
+            --from-literal=DSA_SLACK_WEBHOOK_URL="$DSA_SLACK_WEBHOOK_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # dsa-data-ssh-key — deploy key for the scraper to push to
+          # kraboo-labs/dsa-data over SSH.
+          SSH_KEY_FILE=$(mktemp)
+          trap "shred -u $SSH_KEY_FILE 2>/dev/null || rm -f $SSH_KEY_FILE" EXIT
+          printf '%s\n' "$DSA_DATA_SSH_KEY" > "$SSH_KEY_FILE"
+          chmod 600 "$SSH_KEY_FILE"
+          kubectl create secret generic dsa-data-ssh-key \
+            -n ${{ env.NAMESPACE }} \
+            --from-file=id_ed25519="$SSH_KEY_FILE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       # Migrations job is immutable once created, so we delete + re-apply
       # before every deploy. The manifest pins image:latest which we just
       # pushed, so it picks up the new schema.

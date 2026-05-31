@@ -18,94 +18,93 @@ Prereqs on the cluster (already installed for `lumed`, reused here):
 
 ## One-time setup
 
-### 1. DSA deploy SSH key for `kraboo-labs/dsa-data`
+The deploy is fully driven by `.github/workflows/deploy.yml`. There is
+no manual `kubectl` step — everything (namespace, secrets, migrations,
+deployments, ingress, rollout) happens inside the workflow. You only
+need to populate **repository secrets**.
 
-The scraper CronJob pushes the daily data export to the `dsa-data` repo.
-Generate a dedicated SSH key (do NOT reuse a personal key):
+### 1. Generate the deploy SSH key for `kraboo-labs/dsa-data`
+
+The scraper CronJob pushes the data export to the `dsa-data` repo.
+Generate a dedicated key (do NOT reuse a personal key):
 
 ```bash
 ssh-keygen -t ed25519 -C 'dsa-api scraper push key' -N '' -f /tmp/dsa-data-key
 ```
 
-Add the **public** part as a **deploy key with write access** on
-`https://github.com/kraboo-labs/dsa-data/settings/keys`:
+Add the **public** part as a **deploy key with write access** at
+`https://github.com/kraboo-labs/dsa-data/settings/keys/new`:
 
 ```bash
-cat /tmp/dsa-data-key.pub          # paste this into GitHub
+cat /tmp/dsa-data-key.pub          # paste into the GitHub UI
 ```
 
-Then create the k8s secret holding the **private** part:
+The **private** part goes into a repo secret on the API repo (next step).
+
+### 2. Set repository secrets on `kraboo-labs/dsa-api`
+
+`https://github.com/kraboo-labs/dsa-api/settings/secrets/actions`
+
+| Secret | Required | Source |
+|---|---|---|
+| `DIGITALOCEAN_ACCESS_TOKEN` | yes | DO API token, **Registry + Kubernetes** scopes only |
+| `KUBE_CONFIG` | yes | `base64 -i ~/.kube/config` (NOT `-i k8s-…-do-…-kubeconfig.yaml` because gitleaks already complained about that file living locally — same content, different filename) |
+| `DSA_DATABASE_URL` | yes | DO Managed Postgres, format `postgresql+asyncpg://user:pass@host:25060/dbname?sslmode=require` |
+| `DSA_REDIS_URL` | yes | DO Managed Redis, format `rediss://default:pass@host:25061/0` |
+| `DSA_DATA_SSH_KEY` | yes | Paste the **full content** of `/tmp/dsa-data-key` (include the OpenSSH header and footer lines so the secret value is a valid PEM-formatted private key) |
+| `DSA_SENTRY_DSN` | no | sentry.io project DSN |
+| `DSA_SLACK_WEBHOOK_URL` | no | Slack incoming webhook (alerts on scrape failures + stale-data watchdog) |
+
+Or via `gh` CLI:
 
 ```bash
-kubectl create secret generic dsa-data-ssh-key -n dsa-api \
-  --from-file=id_ed25519=/tmp/dsa-data-key
+gh secret set DIGITALOCEAN_ACCESS_TOKEN -R kraboo-labs/dsa-api          # paste DO token
+gh secret set KUBE_CONFIG -R kraboo-labs/dsa-api < <(base64 -i ~/.kube/config)
+gh secret set DSA_DATABASE_URL -R kraboo-labs/dsa-api                   # paste DB URL
+gh secret set DSA_REDIS_URL -R kraboo-labs/dsa-api                      # paste Redis URL
+gh secret set DSA_DATA_SSH_KEY -R kraboo-labs/dsa-api < /tmp/dsa-data-key
+gh secret set DSA_SENTRY_DSN -R kraboo-labs/dsa-api                     # optional, paste or skip
+gh secret set DSA_SLACK_WEBHOOK_URL -R kraboo-labs/dsa-api              # optional, paste or skip
 ```
 
-…and shred the local copy:
+Then shred the local copy of the SSH key:
 
 ```bash
 shred -u /tmp/dsa-data-key /tmp/dsa-data-key.pub
 ```
 
-### 2. App secrets
-
-Schema (env vars the app expects):
-
-| key | required | source |
-|---|---|---|
-| `DSA_DATABASE_URL` | yes | DO Managed Postgres, format `postgresql+asyncpg://user:pass@host:25060/dbname?sslmode=require` |
-| `DSA_REDIS_URL` | yes | DO Managed Redis, format `rediss://default:pass@host:25061/0` |
-| `DSA_SENTRY_DSN` | no | sentry.io project DSN |
-| `DSA_SLACK_WEBHOOK_URL` | no | Slack incoming webhook (alerts on scrape failures + stale-data watchdog) |
-
 Non-secret env vars (rate limits, source URL, user agent, environment,
 snapshot/export paths, committer identity, GIT_SSH_COMMAND) are pinned
 inline in the manifests — they don't change between deploys.
 
-Create the secret:
+### 3. Trigger the first deploy
 
-```bash
-kubectl create secret generic dsa-api-secrets -n dsa-api \
-  --from-literal=DSA_DATABASE_URL='postgresql+asyncpg://...' \
-  --from-literal=DSA_REDIS_URL='rediss://default:...' \
-  --from-literal=DSA_SENTRY_DSN='https://...@sentry.io/...' \
-  --from-literal=DSA_SLACK_WEBHOOK_URL='https://hooks.slack.com/services/T.../B.../...'
-```
+`https://github.com/kraboo-labs/dsa-api/actions/workflows/deploy.yml`
 
-The `DSA_SENTRY_DSN` key is marked `optional` in the manifests; if you
-omit it from the secret it just won't be injected.
+Click **Run workflow → main → Run workflow**. The workflow will:
 
-### 3. First deploy
+1. Run CI (ruff + format + pytest) against postgres/redis service containers.
+2. Build the image, push as `sha-<short>` + `latest` to DO Container Registry.
+3. Apply the namespace.
+4. **Reconcile `dsa-api-secrets` and `dsa-data-ssh-key` from the repo secrets.**
+5. Run the `dsa-api-migrations` Job (`alembic upgrade head`) and wait.
+6. Apply `api-deployment`, `service`, `scraper-cronjob`, `watchdog-cronjob`, `ingress`.
+7. `kubectl set image` to the freshly-pushed tag and wait on rollout.
+8. Garbage-collect old image tags (keeps the most recent 5).
 
-Order matters — namespace before everything, migrations before the API
-rollout, ingress last so cert-manager only starts issuing once the
-service is actually backing it.
+Subsequent deploys (any change merged to `main` + manual trigger)
+re-reconcile secrets, so rotating any value is "update the repo secret
++ run workflow" — no local `kubectl` needed.
 
-```bash
-kubectl apply -f k8s/namespace.yaml
-
-# Tear down any leftover Job from a previous run so the new one can be
-# applied cleanly (Jobs are immutable once created).
-kubectl delete job dsa-api-migrations -n dsa-api --ignore-not-found
-kubectl apply -f k8s/migrations-job.yaml
-kubectl wait --for=condition=complete --timeout=5m \
-  job/dsa-api-migrations -n dsa-api
-
-kubectl apply -f k8s/api-deployment.yaml
-kubectl apply -f k8s/api-service.yaml
-kubectl apply -f k8s/scraper-cronjob.yaml
-kubectl apply -f k8s/watchdog-cronjob.yaml
-kubectl apply -f k8s/api-ingress.yaml
-```
-
-cert-manager will issue the TLS cert in ~1–2 min. Watch:
+### 4. Watch cert-manager finish issuing TLS
 
 ```bash
 kubectl get certificate -n dsa-api
-kubectl describe certificate dsa-api-tls -n dsa-api
+# dsa-api-tls       Ready=True   (api.dsa-api.com)
+# dsa-api-docs-tls  Ready=True   (docs.dsa-api.com)
 ```
 
-Once `Ready=True`, hit https://api.dsa-api.com/v1/health.
+Once both are `Ready=True`, hit https://api.dsa-api.com/v1/health.
 
 ### DNS
 
@@ -176,17 +175,18 @@ kubectl rollout status deployment/dsa-api -n dsa-api
 - **Sentry**: optional. The DSN is pulled with `optional: true` so a
   missing secret key doesn't block startup.
 
-## GitHub Actions secrets to set
+## GitHub Actions secrets
 
-In `https://github.com/kraboo-labs/dsa-api/settings/secrets/actions`:
+See "One-time setup → Step 2" above. Quick recap:
 
-- `DIGITALOCEAN_ACCESS_TOKEN` — DO API token, **registry** + **kubernetes**
-  scopes only (not full-access).
-- `KUBE_CONFIG` — base64-encoded kubeconfig for the cluster:
-  ```bash
-  base64 -i ~/.kube/config | pbcopy    # macOS
-  base64 -w0 ~/.kube/config             # linux
-  ```
+- `DIGITALOCEAN_ACCESS_TOKEN`, `KUBE_CONFIG` — DO + cluster auth
+- `DSA_DATABASE_URL`, `DSA_REDIS_URL` — managed DB / Redis connection strings
+- `DSA_DATA_SSH_KEY` — private SSH deploy key (public part registered on
+  kraboo-labs/dsa-data as a write-access deploy key)
+- `DSA_SENTRY_DSN`, `DSA_SLACK_WEBHOOK_URL` — optional observability
+
+Workflow reconciles `dsa-api-secrets` and `dsa-data-ssh-key` from these on
+every deploy. Rotation: update the repo secret + run the workflow.
 
 ## Phase 1 follow-ups
 
