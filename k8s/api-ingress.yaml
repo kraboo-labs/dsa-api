@@ -10,10 +10,8 @@ metadata:
     # proxy-read-timeout here.
 spec:
   ingressClassName: nginx
-  # Separate TLS secret per host group so a cert-manager hiccup on one
-  # doesn't invalidate the other. Same isolation pattern as lumed-tls /
-  # klarita-tls. dsa-api.com hosts and ibuildtoday hosts stay independent
-  # so the temp cutover doesn't risk the canonical certs.
+  # Separate TLS secret per host so a cert-manager hiccup on one doesn't
+  # invalidate the other. Same isolation pattern as lumed-tls / klarita-tls.
   tls:
     - hosts:
         - api.dsa-api.com
@@ -21,12 +19,7 @@ spec:
     - hosts:
         - docs.dsa-api.com
       secretName: dsa-api-docs-tls
-    - hosts:
-        - dsa-api.ibuildtoday.com
-        - docs-dsa-api.ibuildtoday.com
-      secretName: dsa-api-ibuildtoday-tls
   rules:
-    # --- Canonical hosts (PRD §14.1). DNS may not exist yet — see k8s/README.md ---
     - host: api.dsa-api.com
       http:
         paths:
@@ -40,28 +33,6 @@ spec:
     # docs.dsa-api.com hits the same backend; the root route in
     # apps/api/main.py detects the host and 307s to /docs (Swagger UI).
     - host: docs.dsa-api.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: dsa-api
-                port:
-                  number: 80
-    # --- Temporary hosts on ibuildtoday.com while dsa-api.com DNS is being
-    # set up. Same backend; the root route handles the docs-prefix redirect ---
-    - host: dsa-api.ibuildtoday.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: dsa-api
-                port:
-                  number: 80
-    - host: docs-dsa-api.ibuildtoday.com
       http:
         paths:
           - path: /

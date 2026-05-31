@@ -43,24 +43,6 @@ async def test_root_on_docs_host_is_case_insensitive(client):
     assert response.status_code == 307
 
 
-async def test_root_on_ibuildtoday_docs_host_redirects(client):
-    # Temporary cutover host while dsa-api.com DNS is set up — see
-    # k8s/api-ingress.yaml. Uses 'docs-' (dash) prefix, not 'docs.' (dot).
-    response = await client.get(
-        "/",
-        headers={"host": "docs-dsa-api.ibuildtoday.com"},
-        follow_redirects=False,
-    )
-    assert response.status_code == 307
-    assert response.headers["location"] == "/docs"
-
-
-async def test_root_on_ibuildtoday_api_host_returns_pointer(client):
-    response = await client.get("/", headers={"host": "dsa-api.ibuildtoday.com"})
-    assert response.status_code == 200
-    assert response.json()["docs"] == "/docs"
-
-
 async def test_root_on_unknown_host_returns_pointer(client):
     # Internal / localhost / cluster IP requests behave like the api host.
     response = await client.get("/", headers={"host": "localhost"})

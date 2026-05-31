@@ -57,3 +57,10 @@ logs/
 # Docker / k8s local
 docker-compose.override.yml
 kubeconfig*
+# Match DigitalOcean's downloaded kubeconfig naming (e.g.
+# k8s-1-33-1-do-5-fra1-agent-search-kubeconfig.yaml). These embed a
+# DO API token; never commit.
+k8s-*-do-*-kubeconfig*.yaml
+k8s-*-do-*-kubeconfig*.yml
+*-kubeconfig.yaml
+*-kubeconfig.yml

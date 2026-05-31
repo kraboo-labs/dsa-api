@@ -113,13 +113,11 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False, response_model=None)
     async def root(request: Request) -> RedirectResponse | dict:
-        # Send users to Swagger UI when the host indicates docs:
-        # - docs.dsa-api.com (canonical)
-        # - docs-dsa-api.ibuildtoday.com (temporary cutover host)
-        # On any other host return a small pointer document instead of
-        # FastAPI's default 404.
+        # When the host is docs.dsa-api.com, send users straight to Swagger UI.
+        # On any other host (api.dsa-api.com, localhost, internal) return a
+        # small pointer document instead of FastAPI's default 404.
         host = request.headers.get("host", "").lower()
-        if host.startswith(("docs.", "docs-")):
+        if host.startswith("docs."):
             return RedirectResponse(url="/docs", status_code=307)
         return {
             "name": "DSA Trusted Flaggers API",
