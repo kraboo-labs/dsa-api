@@ -49,7 +49,7 @@ The **private** part goes into a repo secret on the API repo (next step).
 |---|---|---|
 | `DIGITALOCEAN_ACCESS_TOKEN` | yes | DO API token, **Registry + Kubernetes** scopes only |
 | `KUBE_CONFIG` | yes | `base64 -i ~/.kube/config` (NOT `-i k8s-…-do-…-kubeconfig.yaml` because gitleaks already complained about that file living locally — same content, different filename) |
-| `DSA_DATABASE_URL` | yes | DO Managed Postgres, format `postgresql+asyncpg://user:pass@host:25060/dbname?sslmode=require` |
+| `DSA_DATABASE_URL` | yes | DO Managed Postgres — paste the raw connection string (`postgresql://user:pass@host:25060/dbname?sslmode=require`) as-is. `core.config.normalize_database_url` rewrites the scheme to `+asyncpg` and `sslmode`→`ssl` at load time so the asyncpg driver accepts it. |
 | `DSA_REDIS_URL` | yes | DO Managed Redis, format `rediss://default:pass@host:25061/0` |
 | `DSA_DATA_SSH_KEY` | yes | Paste the **full content** of `/tmp/dsa-data-key` (include the OpenSSH header and footer lines so the secret value is a valid PEM-formatted private key) |
 | `DSA_SENTRY_DSN` | no | sentry.io project DSN |

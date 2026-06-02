@@ -1,6 +1,39 @@
 from functools import lru_cache
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_database_url(url: str) -> str:
+    """Make a libpq-style Postgres URL safe for SQLAlchemy + asyncpg.
+
+    DigitalOcean (and most managed Postgres) hand out connection strings like
+    ``postgresql://user:pass@host:25060/db?sslmode=require``. Passed straight to
+    ``create_async_engine`` that picks the sync ``psycopg2`` driver (not in the
+    image) and asyncpg rejects the libpq ``sslmode`` keyword. We rewrite the
+    bare scheme to the asyncpg driver and translate ``sslmode`` -> ``ssl``
+    (asyncpg accepts the same value names: require/verify-ca/verify-full/...).
+    Already-correct URLs (``postgresql+asyncpg://...`` with no ``sslmode``)
+    pass through untouched.
+    """
+    parts = urlsplit(url)
+    scheme = parts.scheme
+    if scheme in ("postgres", "postgresql"):
+        scheme = "postgresql+asyncpg"
+
+    if scheme.endswith("+asyncpg") and "sslmode=" in parts.query:
+        query = [
+            ("ssl", v) if k == "sslmode" else (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        ]
+        new_query = urlencode(query)
+    else:
+        new_query = parts.query
+
+    if scheme == parts.scheme and new_query == parts.query:
+        return url
+    return urlunsplit((scheme, parts.netloc, parts.path, new_query, parts.fragment))
 
 
 class Settings(BaseSettings):
@@ -17,6 +50,11 @@ class Settings(BaseSettings):
     database_url: str
     database_pool_size: int = 10
     database_max_overflow: int = 20
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, v: str) -> str:
+        return normalize_database_url(v)
 
     redis_url: str
 
