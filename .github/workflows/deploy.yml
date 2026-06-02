@@ -1,9 +1,22 @@
 name: Build & Deploy dsa-api to DigitalOcean
 
-# Manual-trigger only so a missing DIGITALOCEAN_ACCESS_TOKEN / KUBE_CONFIG
-# secret doesn't fail every push. Click 'Run workflow' on the Actions tab
-# when you want to ship. CI runs on every push regardless (see ci.yml).
+# Auto-deploy on push to main, but only when something that actually ships
+# changes — app code, shared libs, migrations, k8s manifests, the image build
+# inputs, or this workflow itself. Docs-only commits (README.md, prds/, …) and
+# test-only changes don't trigger a build+rollout; ci.yml still runs on every
+# push to lint + test. workflow_dispatch stays for manual re-deploys.
 on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "core/**"
+      - "migrations/**"
+      - "k8s/**"
+      - "Dockerfile"
+      - "requirements*.txt"
+      - "alembic.ini"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 env:
