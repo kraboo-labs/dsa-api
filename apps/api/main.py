@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,6 +127,27 @@ def create_app() -> FastAPI:
             "openapi": "/openapi.json",
             "source": settings.source_url,
         }
+
+    # Public, read-only open-data API: any browser origin may call it. There's
+    # no auth or cookies, so credentials stay off (also required when
+    # allow_origins is "*"). Expose our informational headers so browser JS can
+    # read the source/disclaimer/freshness + rate-limit metadata. Added last so
+    # it's the outermost middleware — preflight OPTIONS are answered before the
+    # rate limiter and CORS headers land on every response, including errors.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "OPTIONS"],
+        allow_headers=["*"],
+        allow_credentials=False,
+        expose_headers=[
+            "X-Source-URL",
+            "X-Disclaimer",
+            "X-Data-Updated-At",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Window-Seconds",
+        ],
+    )
 
     app.include_router(trusted_flaggers.router)
     app.include_router(changes.router)
