@@ -42,6 +42,12 @@ spec:
                   # mounted deploy key, not anonymous HTTPS.
                   cd /export
                   git remote set-url origin git@github.com:kraboo-labs/dsa-data.git
+                  # This init container runs as root, so the clone (data/ and
+                  # .git/) is root-owned. The scraper container runs as UID 1001
+                  # and must write the export files + commit. Hand the whole tree
+                  # to 1001 so it can write without group-write gymnastics, and
+                  # so git doesn't reject it as "dubious ownership".
+                  chown -R 1001:1001 /export
               volumeMounts:
                 - name: export
                   mountPath: /export
