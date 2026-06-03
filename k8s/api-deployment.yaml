@@ -4,8 +4,11 @@ metadata:
   name: dsa-api
   namespace: dsa-api
 spec:
-  # PRD §8: 2 replicas to start. Bump once we have real traffic signal.
-  replicas: 2
+  # Single replica during the test phase to conserve cluster RAM. The
+  # rollingUpdate below (maxUnavailable: 0) still surges a new pod up before
+  # tearing the old one down, so deploys stay zero-downtime. Bump to 2+ for
+  # HA / node-failure tolerance once traffic justifies the resource cost.
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
