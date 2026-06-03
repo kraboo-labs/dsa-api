@@ -235,7 +235,17 @@ async def run_ingest(
 
         api_url = extract_api_url(html_result.body)
         logger.info("fetching JSON API: %s", api_url)
-        json_result = await fetch(api_url, client=client, user_agent=settings.user_agent)
+        # The JSON endpoint sits behind the EU webtools WAF, which intermittently
+        # returns 422 ("untrusted network"). Give it a wider retry window (~14s:
+        # 2s+4s+8s) so a transient block clears within the run instead of failing
+        # the scrape and waiting for the next 6h cron.
+        json_result = await fetch(
+            api_url,
+            client=client,
+            user_agent=settings.user_agent,
+            max_attempts=4,
+            backoff_base=2.0,
+        )
 
         raw_rows = parse_api_response(json_result.body)
         logger.info("parsed %d raw rows", len(raw_rows))

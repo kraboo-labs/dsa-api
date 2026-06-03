@@ -56,6 +56,42 @@ async def test_fetch_does_not_retry_4xx():
     assert calls["n"] == 1
 
 
+@pytest.mark.parametrize("transient_code", [422, 429])
+async def test_fetch_retries_on_transient_4xx_then_succeeds(transient_code):
+    # The EU webtools WAF intermittently answers 422/429; these are retryable.
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return httpx.Response(transient_code)
+        return httpx.Response(200, content=b"ok")
+
+    async with _make_client(handler) as client:
+        result = await fetch(
+            "https://example.test/x", client=client, max_attempts=3, backoff_base=0
+        )
+
+    assert result.status_code == 200
+    assert calls["n"] == 3
+
+
+async def test_fetch_retries_then_raises_after_max_attempts_on_persistent_422():
+    # A persistent 422 exhausts retries and surfaces as "failed after N attempts"
+    # — not an immediate "client error 422" hard failure.
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(422)
+
+    async with _make_client(handler) as client:
+        with pytest.raises(FetchError, match="failed after 3 attempts"):
+            await fetch("https://example.test/x", client=client, max_attempts=3, backoff_base=0)
+
+    assert calls["n"] == 3
+
+
 async def test_fetch_raises_after_max_attempts_on_persistent_5xx():
     calls = {"n": 0}
 

@@ -17,6 +17,14 @@ class FetchError(RuntimeError):
     """Raised when fetch fails after all retry attempts."""
 
 
+# 4xx codes that are transient for our upstream and worth retrying. The EU
+# webtools endpoint sits behind a WAF that intermittently answers 422
+# ("Invalid referer or untrusted network") and may 429 under rate limiting;
+# both clear on their own, so we back off and retry rather than failing the
+# whole scrape and waiting 6h for the next cron.
+RETRYABLE_STATUS = frozenset({422, 429})
+
+
 async def fetch(
     url: str,
     *,
@@ -39,9 +47,9 @@ async def fetch(
         for attempt in range(1, max_attempts + 1):
             try:
                 response = await client.get(url, headers={"User-Agent": user_agent})
-                if 500 <= response.status_code < 600:
+                if 500 <= response.status_code < 600 or response.status_code in RETRYABLE_STATUS:
                     raise httpx.HTTPStatusError(
-                        f"server error {response.status_code}",
+                        f"retryable status {response.status_code}",
                         request=response.request,
                         response=response,
                     )
@@ -55,8 +63,13 @@ async def fetch(
                 )
             except (httpx.TransportError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
                 last_err = e
-                # Don't retry client errors (4xx) — they're not transient.
-                if isinstance(e, httpx.HTTPStatusError) and 400 <= e.response.status_code < 500:
+                # Hard-fail genuine client errors (wrong URL, auth, not-found);
+                # the transient 4xx in RETRYABLE_STATUS fall through to backoff.
+                if (
+                    isinstance(e, httpx.HTTPStatusError)
+                    and 400 <= e.response.status_code < 500
+                    and e.response.status_code not in RETRYABLE_STATUS
+                ):
                     raise FetchError(f"client error {e.response.status_code} fetching {url}") from e
                 if attempt < max_attempts:
                     await asyncio.sleep(backoff_base * (2 ** (attempt - 1)))
