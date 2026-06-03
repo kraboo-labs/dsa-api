@@ -31,12 +31,19 @@ def create_app() -> FastAPI:
     settings = get_settings()
     # Must run before FastAPI() so the integration picks up the app on init.
     init_sentry(settings)
+    description = (
+        "Machine-readable mirror of the EU Trusted Flaggers register "
+        "(DSA Article 22(5)). Not a source of truth — see X-Source-URL."
+    )
+    if settings.waitlist_url:
+        description += (
+            "\n\n🔔 **Coming soon — Pro tier:** webhooks on register changes, "
+            "point-in-time audit, bulk export, and higher rate limits. "
+            f"[Join the waitlist]({settings.waitlist_url})."
+        )
     app = FastAPI(
         title="DSA Trusted Flaggers API",
-        description=(
-            "Machine-readable mirror of the EU Trusted Flaggers register "
-            "(DSA Article 22(5)). Not a source of truth — see X-Source-URL."
-        ),
+        description=description,
         version="0.0.1",
     )
 
@@ -120,13 +127,16 @@ def create_app() -> FastAPI:
         host = request.headers.get("host", "").lower()
         if host.startswith("docs."):
             return RedirectResponse(url="/docs", status_code=307)
-        return {
+        body = {
             "name": "DSA Trusted Flaggers API",
             "version": app.version,
             "docs": "/docs",
             "openapi": "/openapi.json",
             "source": settings.source_url,
         }
+        if settings.waitlist_url:
+            body["waitlist"] = settings.waitlist_url
+        return body
 
     # Public, read-only open-data API: any browser origin may call it. There's
     # no auth or cookies, so credentials stay off (also required when

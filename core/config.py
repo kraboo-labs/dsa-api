@@ -63,6 +63,12 @@ class Settings(BaseSettings):
 
     sentry_dsn: str | None = None
 
+    # Public URL of the "Pro tier" waitlist form (Tally/Formspark/etc.). When
+    # set, the API shows a CTA in the docs description and the root pointer.
+    # Demand validation only — emails live in the external form, not our DB.
+    # Leave unset to hide the CTA entirely (no dead link).
+    waitlist_url: str | None = None
+
     # Slack incoming webhook URL (https://hooks.slack.com/services/...).
     # When set, the scraper posts on hard failures and the watchdog CronJob
     # alerts if the last successful scrape is older than 24h.
