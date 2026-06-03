@@ -50,10 +50,18 @@ def create_app() -> FastAPI:
     minute_limit = LimitConfig("minute", 60, settings.rate_limit_per_minute)
     day_limit = LimitConfig("day", 86400, settings.rate_limit_per_day)
 
+    # Operational endpoints are exempt from rate limiting. The k8s liveness
+    # (/v1/version) and readiness (/v1/health) probes hit these every 10-30s
+    # from a single node IP — metering them exhausts that IP's per-day quota
+    # (5000) within hours, after which the pod 429s its OWN probes and
+    # CrashLoops. They carry no data, so there's nothing to meter anyway.
+    unmetered_paths = {"/v1/health", "/v1/version"}
+
     @app.middleware("http")
     async def rate_limit(request: Request, call_next):
-        # Only meter the public v1 surface; /docs, /openapi.json, etc. stay free.
-        if not request.url.path.startswith("/v1/"):
+        # Only meter the public v1 data surface; /docs, /openapi.json, the
+        # health/version probes, etc. stay free.
+        if not request.url.path.startswith("/v1/") or request.url.path in unmetered_paths:
             return await call_next(request)
         redis = get_redis()
         ip = _client_ip(request)

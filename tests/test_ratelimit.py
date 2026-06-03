@@ -3,9 +3,27 @@ import secrets
 
 import pytest_asyncio
 import redis.asyncio as aioredis
+from fastapi.testclient import TestClient
 
+from apps.api.main import create_app
 from core.config import get_settings
 from core.ratelimit import LimitConfig, check_limit
+
+
+def test_version_path_is_exempt_from_rate_limiting(monkeypatch):
+    # Liveness (/v1/version) and readiness (/v1/health) probes hit these every
+    # 10-30s from one node IP; metering them exhausts the daily quota and the
+    # pod ends up 429ing its OWN probes into CrashLoop. They must stay exempt.
+    monkeypatch.setenv("DSA_RATE_LIMIT_PER_MINUTE", "1")
+    monkeypatch.setenv("DSA_RATE_LIMIT_PER_DAY", "1")
+    get_settings.cache_clear()
+    app = create_app()
+    with TestClient(app) as client:
+        # Far past the limit of 1 — an exempt path never 429s. (/v1/version
+        # needs no DB; the middleware short-circuits before the limiter.)
+        codes = [client.get("/v1/version").status_code for _ in range(5)]
+    assert codes == [200] * 5, codes
+    get_settings.cache_clear()
 
 
 @pytest_asyncio.fixture
