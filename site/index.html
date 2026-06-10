@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsa-api — the EU Trusted Flaggers register, machine-readable</title>
+<meta name="description" content="Article 22(5) DSA requires the Trusted Flaggers register to be machine-readable. It isn't. dsa-api is the missing API: REST, open data (CC-BY 4.0), 6-hour freshness, full change history.">
+<meta property="og:title" content="dsa-api — the EU Trusted Flaggers register, machine-readable">
+<meta property="og:description" content="The register the DSA requires, in the format the DSA requires. Free REST API + open dataset.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://dsa-api.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,700;0,800;1,300;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBFAF6;
+  --paper-deep:#F4F2EA;
+  --ink:#101D3C;
+  --ink-soft:#3C486B;
+  --rule:#C9C4B4;
+  --eu:#0A2F8C;
+  --eu-bright:#1543B8;
+  --gold:#C99700;
+  --gold-bright:#E5B400;
+  --stamp:#2B4BB5;
+  --code-bg:#0E1B3E;
+  --code-ink:#D8E0F5;
+  --serif:"Spectral",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--serif);
+  background:var(--paper);
+  color:var(--ink);
+  font-size:17px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+/* paper grain */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .04 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.sheet{max-width:880px;margin:0 auto;padding:0 28px;position:relative;z-index:2}
+
+/* ---------- reveal choreography ---------- */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes growRule{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes stampIn{
+  0%{opacity:0;transform:rotate(-14deg) scale(1.6)}
+  60%{opacity:1;transform:rotate(-8deg) scale(.96)}
+  100%{opacity:.92;transform:rotate(-8deg) scale(1)}
+}
+@keyframes starSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.reveal{opacity:0;animation:rise .7s cubic-bezier(.22,.8,.3,1) forwards}
+@media (prefers-reduced-motion:reduce){
+  .reveal{animation:none;opacity:1}
+  .masthead .rule-double i{animation:none;transform:none}
+  .stamp{animation:none;opacity:.92}
+  .stars-wrap{animation:none}
+}
+
+/* ---------- masthead ---------- */
+.masthead{padding:56px 0 0;position:relative}
+.kicker{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--ink-soft);
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+}
+.rule-double{margin:14px 0 0}
+.rule-double i{
+  display:block;height:1px;background:var(--ink);transform-origin:left;
+  animation:growRule .9s cubic-bezier(.6,0,.2,1) .15s both;
+}
+.rule-double i+i{margin-top:3px;opacity:.45;animation-delay:.3s}
+.hero{position:relative;padding:54px 0 30px}
+.hero h1{
+  font-size:clamp(56px,10vw,104px);font-weight:800;letter-spacing:-.02em;
+  line-height:.95;color:var(--eu);
+}
+.hero h1 .tld{color:var(--gold);font-style:italic;font-weight:300}
+.hero .sub{
+  margin-top:22px;max-width:34ch;font-size:clamp(20px,3vw,26px);
+  font-weight:300;line-height:1.4;color:var(--ink);
+}
+.hero .sub em{font-style:italic;color:var(--eu-bright)}
+/* EU stars watermark */
+.stars-wrap{
+  position:absolute;right:-40px;top:6px;width:300px;height:300px;opacity:.6;
+  animation:starSpin 240s linear infinite;pointer-events:none;
+}
+@media(max-width:760px){.stars-wrap{width:190px;height:190px;right:-50px;opacity:.35}}
+/* stamp */
+.stamp{
+  display:inline-block;margin-top:34px;padding:10px 18px 9px;
+  border:3px double var(--stamp);border-radius:6px;color:var(--stamp);
+  font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;transform:rotate(-8deg);
+  animation:stampIn .5s cubic-bezier(.2,1.4,.4,1) 1s both;
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.12' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.4 -.12'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23r)'/%3E%3C/svg%3E");
+}
+/* live strip */
+.live{
+  margin:46px 0 0;border-top:1px solid var(--ink);border-bottom:1px solid var(--rule);
+  display:grid;grid-template-columns:repeat(4,1fr);
+}
+.live>div{padding:18px 16px 16px;border-left:1px solid var(--rule)}
+.live>div:first-child{border-left:none;padding-left:0}
+.live b{
+  display:block;font-family:var(--mono);font-size:30px;font-weight:600;color:var(--eu);
+  font-variant-numeric:tabular-nums;
+}
+.live span{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+@media(max-width:680px){
+  .live{grid-template-columns:1fr 1fr}
+  .live>div{padding-left:0;border-left:none}
+}
+
+/* ---------- recitals ---------- */
+section{padding:64px 0 0}
+.art-label{
+  font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--gold);font-weight:600;
+}
+.art-label::after{content:"";display:block;width:44px;height:2px;background:var(--gold);margin-top:8px}
+h2{font-size:clamp(28px,4.5vw,40px);font-weight:700;letter-spacing:-.01em;margin:18px 0 8px}
+.recitals{font-size:clamp(19px,2.6vw,23px);font-weight:300;line-height:1.55}
+.recitals p{margin-top:22px;padding-left:64px;position:relative;font-style:italic}
+.recitals p b{font-style:normal;font-weight:700}
+.recitals .num{
+  position:absolute;left:0;top:.2em;font-style:normal;font-family:var(--mono);
+  font-size:13px;color:var(--ink-soft);
+}
+.recitals .therefore{
+  font-style:normal;font-weight:500;border-left:3px solid var(--eu);
+  padding:14px 0 14px 24px;margin-top:34px;margin-left:0;
+}
+.recitals .therefore .num{display:none}
+
+/* ---------- code ---------- */
+.terminal{
+  margin-top:30px;background:var(--code-bg);border-radius:10px;overflow:hidden;
+  box-shadow:0 24px 60px -28px rgba(14,27,62,.55);
+}
+.terminal header{
+  display:flex;align-items:center;gap:8px;padding:12px 18px;
+  border-bottom:1px solid rgba(216,224,245,.12);
+}
+.terminal header i{width:10px;height:10px;border-radius:50%;background:rgba(216,224,245,.18)}
+.terminal header span{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:rgba(216,224,245,.4)}
+.terminal pre{
+  padding:22px 24px 26px;overflow-x:auto;font-family:var(--mono);
+  font-size:13.5px;line-height:1.7;color:var(--code-ink);
+}
+.terminal .c{color:#5E6F9E}.terminal .k{color:#F2C94C}.terminal .s{color:#8FB8FF}.terminal .v{color:#7EE0A3}.terminal .p{color:#D8E0F5}
+.copy-btn{
+  background:none;border:1px solid rgba(216,224,245,.25);color:rgba(216,224,245,.7);
+  font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;margin-left:12px;
+}
+.copy-btn:hover{border-color:var(--gold-bright);color:var(--gold-bright)}
+
+/* ---------- endpoints ---------- */
+.endpoints{margin-top:30px;border-top:1px solid var(--ink)}
+.endpoints a.row{
+  display:grid;grid-template-columns:minmax(280px,38%) 1fr;gap:18px;
+  padding:16px 0;border-bottom:1px solid var(--rule);text-decoration:none;color:inherit;
+  transition:background .15s,padding-left .15s;
+}
+.endpoints a.row:hover{background:var(--paper-deep);padding-left:10px}
+.endpoints code{
+  font-family:var(--mono);font-size:13.5px;font-weight:500;color:var(--eu);
+  word-break:break-all;
+}
+.endpoints code .m{color:var(--gold);font-weight:600}
+.endpoints p{font-size:15px;color:var(--ink-soft);line-height:1.5}
+@media(max-width:680px){.endpoints a.row{grid-template-columns:1fr;gap:4px}}
+
+/* ---------- open data ---------- */
+.opendata{
+  margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:1px;
+  background:var(--rule);border:1px solid var(--rule);
+}
+.opendata>div{background:var(--paper);padding:26px}
+.opendata h3{font-size:20px;font-weight:700;margin-bottom:8px}
+.opendata p{font-size:15px;color:var(--ink-soft)}
+.opendata .mono{font-family:var(--mono);font-size:12.5px;margin-top:14px;display:block;color:var(--eu)}
+@media(max-width:680px){.opendata{grid-template-columns:1fr}}
+
+/* ---------- annex / waitlist ---------- */
+.annex{
+  margin-top:34px;border:2px solid var(--eu);position:relative;
+  background:linear-gradient(180deg,var(--paper) 0%,var(--paper-deep) 100%);
+  padding:42px 44px 46px;
+}
+.annex::before{
+  content:"ANNEX I";position:absolute;top:-13px;left:32px;background:var(--paper);
+  padding:0 14px;font-family:var(--mono);font-size:12px;letter-spacing:.24em;color:var(--eu);font-weight:600;
+}
+.annex h2{margin-top:0}
+.annex .lede{font-size:18px;font-weight:300;max-width:54ch}
+.tiers{margin:30px 0 4px;display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+.tiers h4{
+  font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:8px;
+}
+.tiers h4::before{content:"§ ";color:var(--ink-soft)}
+.tiers p{font-size:14.5px;color:var(--ink-soft);line-height:1.55}
+@media(max-width:680px){.tiers{grid-template-columns:1fr;gap:18px}.annex{padding:34px 24px}}
+.waitform{margin-top:32px;display:flex;gap:10px;flex-wrap:wrap}
+.waitform input{
+  flex:1;min-width:220px;font-family:var(--mono);font-size:14px;padding:14px 16px;
+  border:1px solid var(--ink);background:var(--paper);color:var(--ink);border-radius:0;
+}
+.waitform input:focus{outline:2px solid var(--gold-bright);outline-offset:-1px;border-color:var(--gold-bright)}
+.waitform button{
+  font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  padding:14px 26px;background:var(--eu);color:#fff;border:1px solid var(--eu);cursor:pointer;
+  transition:background .15s,transform .1s;
+}
+.waitform button:hover{background:var(--eu-bright)}
+.waitform button:active{transform:translateY(1px)}
+.waitnote{margin-top:12px;font-size:13px;color:var(--ink-soft);font-style:italic}
+.wait-ok{margin-top:14px;font-family:var(--mono);font-size:13px;color:#1A7A3E;display:none}
+
+/* ---------- footer ---------- */
+footer{margin-top:84px;border-top:1px solid var(--ink);padding:30px 0 60px}
+.disclaimer{
+  font-size:14px;color:var(--ink-soft);max-width:62ch;line-height:1.6;
+}
+.disclaimer code{font-family:var(--mono);font-size:12px;background:var(--paper-deep);padding:1px 6px}
+.foot-links{margin-top:22px;display:flex;gap:26px;flex-wrap:wrap}
+.foot-links a{font-family:var(--mono);font-size:12.5px;letter-spacing:.08em;color:var(--eu);text-decoration:none;border-bottom:1px solid var(--rule)}
+.foot-links a:hover{border-color:var(--gold)}
+.colophon{margin-top:26px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+a{color:var(--eu)}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="masthead">
+    <div class="kicker reveal" style="animation-delay:.05s">
+      <span>kraboo labs · open data series</span>
+      <span>regulation (eu) 2022/2065 · art. 22(5)</span>
+    </div>
+    <div class="rule-double"><i></i><i></i></div>
+
+    <div class="hero">
+      <div class="stars-wrap" aria-hidden="true">
+        <svg viewBox="0 0 200 200" width="100%" height="100%">
+          <g fill="#C99700" opacity=".85">
+            <!-- 12 EU stars on a circle -->
+            <g id="star"><path d="M100 18l2.6 8.1h8.5l-6.9 5 2.7 8.1-6.9-5-6.9 5 2.7-8.1-6.9-5h8.5z"/></g>
+            <use href="#star" transform="rotate(30 100 100)"/><use href="#star" transform="rotate(60 100 100)"/>
+            <use href="#star" transform="rotate(90 100 100)"/><use href="#star" transform="rotate(120 100 100)"/>
+            <use href="#star" transform="rotate(150 100 100)"/><use href="#star" transform="rotate(180 100 100)"/>
+            <use href="#star" transform="rotate(210 100 100)"/><use href="#star" transform="rotate(240 100 100)"/>
+            <use href="#star" transform="rotate(270 100 100)"/><use href="#star" transform="rotate(300 100 100)"/>
+            <use href="#star" transform="rotate(330 100 100)"/>
+          </g>
+        </svg>
+      </div>
+      <h1 class="reveal" style="animation-delay:.15s">dsa-api<span class="tld">.com</span></h1>
+      <p class="sub reveal" style="animation-delay:.3s">
+        The EU Trusted Flaggers register, <em>actually</em> machine-readable.
+        Free REST API · open data · full change history.
+      </p>
+      <div class="stamp" aria-hidden="true">machine-readable · as required by art. 22(5)</div>
+    </div>
+
+    <div class="live reveal" style="animation-delay:.5s" id="live">
+      <div><b id="n-flaggers">73</b><span>trusted flaggers</span></div>
+      <div><b id="n-countries">21</b><span>member states</span></div>
+      <div><b id="n-areas">14</b><span>areas of expertise</span></div>
+      <div><b id="n-fresh">&le;6h</b><span id="fresh-label">data freshness</span></div>
+    </div>
+  </header>
+
+  <!-- ============ RECITALS ============ -->
+  <section>
+    <div class="art-label">Recitals</div>
+    <div class="recitals">
+      <p><span class="num">(1)</span> Whereas Article 22(5) of the Digital Services Act requires the European Commission to publish the register of designated Trusted Flaggers <b>“in an easily accessible and machine-readable format”</b>;</p>
+      <p><span class="num">(2)</span> Whereas the register is in practice published as a server-rendered HTML page — no API, no JSON or CSV download, no change feed, no stable identifiers;</p>
+      <p><span class="num">(3)</span> Whereas platform compliance teams are nonetheless expected to verify flagger status, route Article 22 notices with priority, and prove who was designated when;</p>
+      <p class="therefore">Now, therefore: <b>dsa-api</b> mirrors the official register every 6 hours, normalises it into a stable schema, tracks every addition, modification and removal, and serves it the way the regulation intended.</p>
+    </div>
+  </section>
+
+  <!-- ============ ART 1: THE API ============ -->
+  <section>
+    <div class="art-label">Article 1</div>
+    <h2>One request away</h2>
+    <p style="max-width:58ch;color:var(--ink-soft)">No key, no signup, no SDK. Public, CORS-enabled, rate-limited fairly.
+       Try it from your terminal right now:</p>
+
+    <div class="terminal">
+      <header>
+        <i></i><i></i><i></i>
+        <span>curl · api.dsa-api.com<button class="copy-btn" data-copy='curl "https://api.dsa-api.com/v1/trusted-flaggers?country=FR&area=illegal_speech"'>copy</button></span>
+      </header>
+      <pre><span class="c">$</span> <span class="p">curl</span> <span class="s">"https://api.dsa-api.com/v1/trusted-flaggers?country=FR&amp;area=illegal_speech"</span>
+
+<span class="p">{</span>
+  <span class="k">"data"</span><span class="p">: [{</span>
+    <span class="k">"id"</span><span class="p">:</span> <span class="s">"7c9e6679-7425-40de-944b-e07fc1f90ae7"</span><span class="p">,</span>
+    <span class="k">"name"</span><span class="p">:</span> <span class="s">"Addictions France"</span><span class="p">,</span>
+    <span class="k">"country"</span><span class="p">:</span> <span class="s">"FR"</span><span class="p">,</span>
+    <span class="k">"areas_of_expertise"</span><span class="p">: [</span><span class="s">"illegal_speech"</span><span class="p">,</span> <span class="s">"protection_of_minors"</span><span class="p">],</span>
+    <span class="k">"designated_at"</span><span class="p">:</span> <span class="s">"2024-11-21"</span><span class="p">,</span>
+    <span class="k">"status"</span><span class="p">:</span> <span class="v">"active"</span><span class="p">,</span>
+    <span class="k">"contact_email"</span><span class="p">:</span> <span class="s">"…"</span><span class="p">,</span> <span class="k">"website"</span><span class="p">:</span> <span class="s">"…"</span>
+  <span class="p">}],</span>
+  <span class="k">"meta"</span><span class="p">: {</span> <span class="k">"total"</span><span class="p">:</span> <span class="v">8</span><span class="p">,</span> <span class="k">"limit"</span><span class="p">:</span> <span class="v">50</span><span class="p">,</span> <span class="k">"offset"</span><span class="p">:</span> <span class="v">0</span> <span class="p">}</span>
+<span class="p">}</span>
+<span class="c"># X-Data-Updated-At: fresh within the last 6 hours</span>
+<span class="c"># X-Source-URL: the official EC register — always cited</span></pre>
+    </div>
+  </section>
+
+  <!-- ============ ART 2: ENDPOINTS ============ -->
+  <section>
+    <div class="art-label">Article 2</div>
+    <h2>Endpoints</h2>
+    <div class="endpoints">
+      <a class="row" href="https://docs.dsa-api.com/docs" target="_blank" rel="noopener">
+        <code><span class="m">GET</span> /v1/trusted-flaggers</code>
+        <p>List &amp; filter — by country, area of expertise, DSC, designation date, free-text search.</p>
+      </a>
+      <a class="row" href="https://docs.dsa-api.com/docs" target="_blank" rel="noopener">
+        <code><span class="m">GET</span> /v1/trusted-flaggers/lookup</code>
+        <p>Resolve an email, domain or website to a flagger. “Is this notice actually from a Trusted Flagger?”</p>
+      </a>
+      <a class="row" href="https://docs.dsa-api.com/docs" target="_blank" rel="noopener">
+        <code><span class="m">GET</span> /v1/trusted-flaggers/{id}/history</code>
+        <p>Every recorded change for one flagger — designations, edits, removals, restorations.</p>
+      </a>
+      <a class="row" href="https://docs.dsa-api.com/docs" target="_blank" rel="noopener">
+        <code><span class="m">GET</span> /v1/changes</code>
+        <p>Register-wide changelog. Poll it, diff it, audit it.</p>
+      </a>
+      <a class="row" href="https://docs.dsa-api.com/docs" target="_blank" rel="noopener">
+        <code><span class="m">GET</span> /v1/stats</code>
+        <p>Aggregates by country, area and DSC — the numbers at the top of this page come from here.</p>
+      </a>
+    </div>
+    <p style="margin-top:18px;font-size:14px;color:var(--ink-soft)">
+      Full OpenAPI schema &amp; interactive docs at
+      <a href="https://docs.dsa-api.com/docs">docs.dsa-api.com</a>.
+    </p>
+  </section>
+
+  <!-- ============ ART 3: OPEN DATA ============ -->
+  <section>
+    <div class="art-label">Article 3</div>
+    <h2>Open data, honestly</h2>
+    <div class="opendata">
+      <div>
+        <h3>The dataset is free. Forever.</h3>
+        <p>Every scrape is exported as flat JSON + CSV and committed to a public GitHub repo under
+           <b>CC-BY 4.0</b>. Clone it, vendor it, build on it — no account, no API needed.</p>
+        <span class="mono">→ github.com/kraboo-labs/dsa-data</span>
+      </div>
+      <div>
+        <h3>Not a source of truth.</h3>
+        <p>The authoritative register remains the European Commission’s page. Every response says so:
+           an <b>X-Source-URL</b> header links the official source, and <b>X-Disclaimer</b> makes the
+           status explicit. We sell convenience, never authority.</p>
+        <span class="mono">→ X-Disclaimer: not-a-source-of-truth-see-source-url</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ANNEX I: PRO / WAITLIST ============ -->
+  <section id="pro">
+    <div class="annex">
+      <h2>Pro tier — in preparation</h2>
+      <p class="lede">The register is free. What compliance teams pay for is <em>not having to watch it</em>.
+         Three things polling can’t give you:</p>
+      <div class="tiers">
+        <div>
+          <h4>Webhooks</h4>
+          <p>A signed payload the moment a flagger is added, modified or removed. No cron, no diffing — your incident queue just knows.</p>
+        </div>
+        <div>
+          <h4>Point-in-time audit</h4>
+          <p>“Was this entity a designated Trusted Flagger on 15 March?” Deterministic answers reconstructed from full event history — defensible in an audit.</p>
+        </div>
+        <div>
+          <h4>SLA &amp; quota</h4>
+          <p>99.9% uptime commitment, higher rate limits keyed to your token, and support from the people who run the pipeline.</p>
+        </div>
+      </div>
+      <form class="waitform" id="waitform" novalidate>
+        <input type="email" id="waitemail" placeholder="compliance@yourplatform.eu" required aria-label="Work email">
+        <button type="submit">Join the waitlist</button>
+      </form>
+      <p class="wait-ok" id="waitok">✓ Noted — you’re on the list. We’ll write when Pro opens.</p>
+      <p class="waitnote">No spam, no lock-in. Pro ships only if enough teams want it — that’s the honest deal.</p>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <p class="disclaimer">
+      <b>Final provisions.</b> dsa-api is an independent community mirror operated by kraboo labs.
+      It is not affiliated with, nor endorsed by, the European Commission. The authoritative register
+      is the <a href="https://digital-strategy.ec.europa.eu/en/policies/trusted-flaggers-under-dsa">official EC publication</a>;
+      every API response carries <code>X-Source-URL</code> and <code>X-Disclaimer</code> headers.
+      No compliance guarantees or legal advice are provided or sold.
+    </p>
+    <div class="foot-links">
+      <a href="https://api.dsa-api.com">api</a>
+      <a href="https://docs.dsa-api.com/docs">docs</a>
+      <a href="https://status.dsa-api.com">status</a>
+      <a href="https://github.com/kraboo-labs/dsa-data">open data (cc-by 4.0)</a>
+      <a href="https://api.dsa-api.com/openapi.json">openapi.json</a>
+    </div>
+    <p class="colophon">kraboo labs · an ibuildtoday project · data updated <span id="foot-updated">every 6 hours</span></p>
+  </footer>
+</div>
+
+<script>
+/* ====== CONFIG ====== */
+// Signups POST to the API's Resend-backed waitlist endpoint. If it's not
+// enabled (404) or unreachable, fall back to a plain mailto.
+const WAITLIST_ENDPOINT = "https://api.dsa-api.com/v1/waitlist";
+const CONTACT_EMAIL = "hello@dsa-api.com";
+
+/* ====== live stats ====== */
+(async () => {
+  try {
+    const r = await fetch("https://api.dsa-api.com/v1/stats");
+    if (!r.ok) return;
+    const j = await r.json();
+    const d = j.data ?? j;
+    const total = d.total;
+    const countries = d.by_country ? Object.keys(d.by_country).length : null;
+    const areas = d.by_area ? Object.keys(d.by_area).length : null;
+    if (total) countUp("n-flaggers", total);
+    if (countries) countUp("n-countries", countries);
+    if (areas) countUp("n-areas", areas);
+    const upd = r.headers.get("x-data-updated-at");
+    if (upd) {
+      const hours = Math.max(0, Math.round((Date.now() - new Date(upd)) / 36e5));
+      document.getElementById("n-fresh").textContent = hours <= 1 ? "1h" : hours + "h";
+      document.getElementById("fresh-label").textContent = "since last sync";
+      document.getElementById("foot-updated").textContent =
+        new Date(upd).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+    }
+  } catch (_) { /* static fallbacks already rendered */ }
+})();
+
+function countUp(id, target) {
+  const el = document.getElementById(id);
+  const t0 = performance.now(), dur = 900, from = 0;
+  function tick(t) {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(from + (target - from) * e);
+    if (k < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ====== waitlist ====== */
+document.getElementById("waitform").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = document.getElementById("waitemail");
+  const btn = e.target.querySelector("button");
+  const email = input.value.trim();
+  if (!/.+@.+\..+/.test(email)) { input.focus(); return; }
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    const r = await fetch(WAITLIST_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    document.getElementById("waitok").style.display = "block";
+    input.value = "";
+  } catch (_) {
+    // Endpoint off or unreachable — degrade to a prefilled email.
+    location.href = "mailto:" + CONTACT_EMAIL +
+      "?subject=" + encodeURIComponent("Pro tier waitlist") +
+      "&body=" + encodeURIComponent("Please add " + email + " to the dsa-api Pro waitlist.");
+  } finally {
+    btn.disabled = false; btn.textContent = "Join the waitlist";
+  }
+});
+
+/* ====== copy button ====== */
+document.querySelectorAll(".copy-btn").forEach(b =>
+  b.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "copied ✓"; }
+    catch (_) { b.textContent = "select manually"; }
+    setTimeout(() => (b.textContent = "copy"), 1600);
+  })
+);
+
+/* ====== scroll reveals for sections ====== */
+const io = new IntersectionObserver(es => es.forEach(x => {
+  if (x.isIntersecting) { x.target.classList.add("reveal"); io.unobserve(x.target); }
+}), { rootMargin: "-60px" });
+document.querySelectorAll("section").forEach(s => { s.style.opacity = 0; io.observe(s); });
+</script>
+</body>
+</html>
