@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     # Leave unset to hide the CTA entirely (no dead link).
     waitlist_url: str | None = None
 
+    # Resend (https://resend.com) backs POST /v1/waitlist: signups land in the
+    # given Audience, never in our DB. Both must be set or the endpoint
+    # returns 404 (feature off). resend_from additionally sends a best-effort
+    # confirmation email, e.g. 'dsa-api <hello@dsa-api.com>' — the domain must
+    # be verified in Resend first.
+    resend_api_key: str | None = None
+    resend_audience_id: str | None = None
+    resend_from: str | None = None
+
     # Slack incoming webhook URL (https://hooks.slack.com/services/...).
     # When set, the scraper posts on hard failures and the watchdog CronJob
     # alerts if the last successful scrape is older than 24h.

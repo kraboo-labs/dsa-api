@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db_session, get_redis
-from apps.api.routers import changes, stats, trusted_flaggers
+from apps.api.routers import changes, stats, trusted_flaggers, waitlist
 from core.config import Settings, get_settings
 from core.observability import init_sentry
 from core.ratelimit import LimitConfig, check_limit
@@ -155,7 +155,9 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_methods=["GET", "OPTIONS"],
+        # POST is for /v1/waitlist (the landing-page signup form); everything
+        # else on the surface stays read-only GET.
+        allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
         allow_credentials=False,
         expose_headers=[
@@ -170,6 +172,7 @@ def create_app() -> FastAPI:
     app.include_router(trusted_flaggers.router)
     app.include_router(changes.router)
     app.include_router(stats.router)
+    app.include_router(waitlist.router)
 
     return app
 

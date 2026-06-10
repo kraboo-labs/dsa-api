@@ -59,6 +59,26 @@ spec:
                   name: dsa-api-secrets
                   key: DSA_SENTRY_DSN
                   optional: true
+            # Resend-backed waitlist (POST /v1/waitlist); endpoint stays 404
+            # until both key and audience are present in the secret.
+            - name: DSA_RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dsa-api-secrets
+                  key: DSA_RESEND_API_KEY
+                  optional: true
+            - name: DSA_RESEND_AUDIENCE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: dsa-api-secrets
+                  key: DSA_RESEND_AUDIENCE_ID
+                  optional: true
+            - name: DSA_RESEND_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: dsa-api-secrets
+                  key: DSA_RESEND_FROM
+                  optional: true
           # Liveness probes /v1/version on purpose — it doesn't touch the DB,
           # so a transient Postgres hiccup won't restart the pod. Readiness
           # uses /v1/health so traffic stops flowing to a pod that can't talk
