@@ -57,7 +57,7 @@ jobs:
       DSA_RATE_LIMIT_PER_DAY: "100000"
       PYTHONPATH: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -78,7 +78,7 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
