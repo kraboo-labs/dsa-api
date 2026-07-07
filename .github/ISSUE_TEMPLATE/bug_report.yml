@@ -1,0 +1,28 @@
+name: "🐛 Bug report"
+description: The API or scraper misbehaves.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: endpoint
+    attributes:
+      label: Endpoint / request
+      placeholder: "GET /v1/trusted-flaggers?country=SK"
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: A curl command or steps we can run.
+      render: shell
+  - type: input
+    id: request_id
+    attributes:
+      label: Response headers (X-Request-Id / X-Data-Updated-At)
+      description: If you have them — helps us trace it.

@@ -1,0 +1,27 @@
+name: "💡 Feature request"
+description: Suggest an endpoint, filter, dataset, or improvement.
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The use case, not just the feature. What would it unblock?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - New endpoint / filter
+        - New DSA register (e.g. Art. 21 ODS bodies, VLOP list, DSC contacts)
+        - Data field / normalization
+        - Webhooks / notifications
+        - Docs / SDK
+        - Other

@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 API docs (Swagger)
+    url: https://docs.dsa-api.com/docs
+    about: Interactive API reference.
+  - name: 📈 Status & uptime
+    url: https://status.dsa-api.com
+    about: Is the API up? Recent incidents.
+  - name: 💬 Questions & ideas
+    url: https://github.com/kraboo-labs/dsa-api/discussions
+    about: Ask a question or discuss an idea.
+  - name: 🔒 Report a security issue
+    url: https://github.com/kraboo-labs/dsa-api/security/policy
+    about: Please report vulnerabilities privately, not as public issues.

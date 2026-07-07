@@ -1,0 +1,42 @@
+name: "📊 Data issue"
+description: A flagger is wrong, missing, stale, or misclassified in the mirror.
+title: "[data]: "
+labels: ["data"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep the mirror accurate. The data comes from the
+        official EU register — please link the source so we can verify.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What's wrong?
+      options:
+        - Flagger is missing (present on EU page, not in the API)
+        - Flagger should be removed (gone from EU page, still in the API)
+        - Field is incorrect (name, country, DSC, areas, date, website…)
+        - Area of expertise misclassified / mapped to "other"
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: flagger
+    attributes:
+      label: Flagger name (or API id)
+      placeholder: "Ochráň ma  ·  or  cb983b7f-…"
+  - type: input
+    id: source
+    attributes:
+      label: Link to the official EU register entry
+      placeholder: "https://digital-strategy.ec.europa.eu/en/policies/trusted-flaggers-under-dsa"
+    validations:
+      required: true
+  - type: textarea
+    id: detail
+    attributes:
+      label: Details
+      description: What does the API return vs. what the EU page shows?
+  - type: markdown
+    attributes:
+      value: "ℹ️ Reminder: this is a community mirror, not the authoritative source. For legal decisions, always verify on the EU page."
