@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     # Leave unset to hide the CTA entirely (no dead link).
     waitlist_url: str | None = None
 
+    # Resend (https://resend.com) — server-side waitlist capture. When both the
+    # API key and an audience id are set, POST /v1/waitlist adds the submitted
+    # email as a contact in that Resend audience. Unset → the endpoint 503s.
+    resend_api_key: str | None = None
+    resend_audience_id: str | None = None
+    # Optional: address to notify on each new signup (needs a verified Resend
+    # sending domain). Unset → no notification email is sent.
+    waitlist_notify_email: str | None = None
+
     # Slack incoming webhook URL (https://hooks.slack.com/services/...).
     # When set, the scraper posts on hard failures and the watchdog CronJob
     # alerts if the last successful scrape is older than 24h.

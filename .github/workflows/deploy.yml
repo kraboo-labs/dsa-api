@@ -120,6 +120,9 @@ jobs:
           DSA_REDIS_URL: ${{ secrets.DSA_REDIS_URL }}
           DSA_SENTRY_DSN: ${{ secrets.DSA_SENTRY_DSN }}
           DSA_SLACK_WEBHOOK_URL: ${{ secrets.DSA_SLACK_WEBHOOK_URL }}
+          DSA_RESEND_API_KEY: ${{ secrets.DSA_RESEND_API_KEY }}
+          DSA_RESEND_AUDIENCE_ID: ${{ secrets.DSA_RESEND_AUDIENCE_ID }}
+          DSA_WAITLIST_NOTIFY_EMAIL: ${{ secrets.DSA_WAITLIST_NOTIFY_EMAIL }}
           DSA_DATA_SSH_KEY: ${{ secrets.DSA_DATA_SSH_KEY }}
         run: |
           if [ -z "$DSA_DATABASE_URL" ] || [ -z "$DSA_REDIS_URL" ] || [ -z "$DSA_DATA_SSH_KEY" ]; then
@@ -137,6 +140,9 @@ jobs:
             --from-literal=DSA_REDIS_URL="$DSA_REDIS_URL" \
             --from-literal=DSA_SENTRY_DSN="$DSA_SENTRY_DSN" \
             --from-literal=DSA_SLACK_WEBHOOK_URL="$DSA_SLACK_WEBHOOK_URL" \
+            --from-literal=DSA_RESEND_API_KEY="$DSA_RESEND_API_KEY" \
+            --from-literal=DSA_RESEND_AUDIENCE_ID="$DSA_RESEND_AUDIENCE_ID" \
+            --from-literal=DSA_WAITLIST_NOTIFY_EMAIL="$DSA_WAITLIST_NOTIFY_EMAIL" \
             --dry-run=client -o yaml | kubectl apply -f -
 
           # dsa-data-ssh-key — deploy key for the scraper to push to
