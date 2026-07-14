@@ -8,7 +8,7 @@
 #   - migrations Job      → alembic upgrade head
 
 # ---------- Stage 1: install Python deps into a user-site prefix ----------
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential gcc \
@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
 # ---------- Stage 2: slim runtime image ----------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 WORKDIR /app
 
 # Non-root user (UID 1001 matches the lumed convention so a shared
